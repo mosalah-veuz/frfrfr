@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{% block title %}My Profile — EventHub{% endblock %}
+{% block body %}
+<div class="portal-page">
+  <header class="portal-header">
+    <div class="portal-header-brand" onclick="window.location.href='{% url 'portal' %}'" style="cursor: pointer;">
+      <span class="brand-icon">◈</span>
+      <h1>EventHub</h1>
+    </div>
+    <div class="portal-header-right">
+      <p class="header-subtitle">Manage your account details</p>
+      {% if request.user.is_authenticated %}
+        <div class="user-profile">
+          <div class="user-info" onclick="toggleUserDropdown(event)">
+            <span class="user-avatar">👤</span>
+            <span class="user-name">{{ request.user.get_full_name|default:request.user.username }}</span>
+            <span class="dropdown-chevron">▼</span>
+          </div>
+          <div class="user-dropdown" id="userDropdown">
+            <a href="{% url 'profile' %}">Profile</a>
+            {% if request.user.is_staff %}
+              <a href="{% url 'admin_dashboard' %}">Admin Dashboard</a>
+            {% endif %}
+            <a href="{% url 'admin_logout' %}">Sign Out</a>
+          </div>
+        </div>
+      {% else %}
+        <a href="{% url 'admin_login' %}" class="btn btn-secondary btn-login-header">Sign In</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="checkout-container" style="max-width: 600px; margin: 40px auto 0;">
+    <div class="back-nav">
+      <a href="{% url 'portal' %}" class="back-link">← Back to Portal</a>
+    </div>
+
+    <div class="login-card" style="max-width: 100%; margin-top: 12px; box-shadow: var(--shadow);">
+      <div class="login-header" style="margin-bottom: 24px;">
+        <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 6px;">My Profile</h2>
+        <p style="color: var(--text2); font-size: 14px;">Update your personal details below</p>
+      </div>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" id="profileForm" novalidate>
+        {% csrf_token %}
+        
+        <div class="field">
+          <label for="id_first_name">First Name</label>
+          {{ form.first_name }}
+          {% if form.first_name.errors %}
+            <span class="field-error">{{ form.first_name.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="field">
+          <label for="id_last_name">Last Name</label>
+          {{ form.last_name }}
+          {% if form.last_name.errors %}
+            <span class="field-error">{{ form.last_name.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="field">
+          <label for="id_email">Email Address</label>
+          {{ form.email }}
+          {% if form.email.errors %}
+            <span class="field-error">{{ form.email.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="field">
+          <label for="id_phone">Phone Number</label>
+          {{ form.phone }}
+          {% if form.phone.errors %}
+            <span class="field-error">{{ form.phone.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <div class="form-actions" style="flex-direction: column; gap: 12px; align-items: stretch; margin-top: 24px;">
+          <button type="submit" class="btn btn-primary btn-full">Save Profile Details</button>
+          <a href="{% url 'portal' %}" class="btn btn-secondary btn-full">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/css/intlTelInput.css">
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/intlTelInput.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/utils.js"></script>
+<script>
+// Progressive formatter for local numbers
+function formatProgressive(digits, countryCode) {
+  if (!digits) return "";
+  
+  if (countryCode === 'in') {
+    // India: XXXXX XXXXX (max 10 digits)
+    const cleanDigits = digits.slice(0, 10);
+    if (cleanDigits.length > 5) {
+      return cleanDigits.slice(0, 5) + " " + cleanDigits.slice(5);
+    }
+    return cleanDigits;
+  }
+  
+  if (countryCode === 'us') {
+    // US: (XXX) XXX-XXXX (max 10 digits)
+    const cleanDigits = digits.slice(0, 10);
+    if (cleanDigits.length === 0) return "";
+    let res = "";
+    if (cleanDigits.length <= 3) {
+      res = "(" + cleanDigits;
+    } else if (cleanDigits.length <= 6) {
+      res = "(" + cleanDigits.slice(0, 3) + ") " + cleanDigits.slice(3);
+    } else {
+      res = "(" + cleanDigits.slice(0, 3) + ") " + cleanDigits.slice(3, 6) + "-" + cleanDigits.slice(6);
+    }
+    return res;
+  }
+  
+  if (countryCode === 'gb') {
+    // UK Mobile: XXXXX XXXXXX (max 11 digits)
+    const cleanDigits = digits.slice(0, 11);
+    if (cleanDigits.length > 5) {
+      return cleanDigits.slice(0, 5) + " " + cleanDigits.slice(5);
+    }
+    return cleanDigits;
+  }
+
+  // Fallback for other countries
+  const cleanDigits = digits.slice(0, 15);
+  if (window.intlTelInputUtils) {
+    try {
+      const formatted = intlTelInputUtils.formatNumber(cleanDigits, countryCode, intlTelInputUtils.numberFormat.NATIONAL);
+      if (formatted) return formatted;
+    } catch (e) {}
+  }
+  return cleanDigits;
+}
+
+let profileIti;
+
+document.addEventListener("DOMContentLoaded", () => {
+  const phoneInput = document.getElementById('id_phone');
+  if (phoneInput) {
+    profileIti = window.intlTelInput(phoneInput, {
+      initialCountry: "in",
+      preferredCountries: ["in", "us", "gb"],
+      separateDialCode: true,
+      dropdownContainer: document.body,
+      utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/utils.js"
+    });
+
+    let lastVal = phoneInput.value;
+    const formatPhone = () => {
+      try {
+        const currentVal = phoneInput.value;
+        const countryData = profileIti.getSelectedCountryData();
+        if (countryData && countryData.iso2) {
+          const cleanVal = currentVal.replace(/\D/g, '');
+          
+          // Enforce strict country-specific digit limit
+          let maxLen = 15;
+          if (countryData.iso2 === 'in' || countryData.iso2 === 'us') maxLen = 10;
+          else if (countryData.iso2 === 'gb') maxLen = 11;
+          
+          if (cleanVal.length > maxLen) {
+            phoneInput.value = lastVal;
+            return;
+          }
+
+          const formatted = formatProgressive(cleanVal, countryData.iso2);
+          if (formatted !== currentVal) {
+            const selectionEnd = phoneInput.selectionEnd;
+            const lengthDiff = formatted.length - currentVal.length;
+            phoneInput.value = formatted;
+            lastVal = formatted;
+            const newPos = Math.max(0, selectionEnd + lengthDiff);
+            phoneInput.setSelectionRange(newPos, newPos);
+          } else {
+            lastVal = currentVal;
+          }
+        }
+      } catch (err) {
+        console.error("Error formatting phone:", err);
+      }
+    };
+
+    phoneInput.addEventListener('input', () => {
+      const fieldContainer = phoneInput.closest('.field');
+      const errEl = fieldContainer.querySelector('.field-error');
+      if (errEl) errEl.textContent = '';
+
+      const currentVal = phoneInput.value;
+      if (currentVal.length > lastVal.length) {
+        formatPhone();
+      } else {
+        lastVal = currentVal;
+      }
+    });
+
+    phoneInput.addEventListener('countrychange', formatPhone);
+
+    if (phoneInput.value) {
+      if (window.intlTelInputUtils) {
+        formatPhone();
+      } else {
+        const interval = setInterval(() => {
+          if (window.intlTelInputUtils) {
+            formatPhone();
+            clearInterval(interval);
+          }
+        }, 100);
+      }
+    }
+
+    const form = document.getElementById('profileForm');
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        const phoneVal = profileIti.getNumber().trim();
+        if (!phoneVal) {
+          e.preventDefault();
+          showPhoneError("Phone number is required.");
+          return;
+        }
+
+        if (!profileIti.isValidNumber()) {
+          e.preventDefault();
+          showPhoneError("Enter a valid phone number.");
+          return;
+        }
+
+        phoneInput.value = phoneVal;
+      });
+    }
+  }
+});
+
+function showPhoneError(message) {
+  const phoneInput = document.getElementById('id_phone');
+  const fieldContainer = phoneInput.closest('.field');
+  let errSpan = fieldContainer.querySelector('.field-error');
+  if (!errSpan) {
+    errSpan = document.createElement('span');
+    errSpan.className = 'field-error';
+    fieldContainer.appendChild(errSpan);
+  }
+  errSpan.textContent = message;
+}
+
+// User dropdown toggle
+function toggleUserDropdown(event) {
+  event.stopPropagation();
+  const dropdown = document.getElementById('userDropdown');
+  const userInfo = document.querySelector('.user-info');
+  if (dropdown) dropdown.classList.toggle('active');
+  if (userInfo) userInfo.classList.toggle('active');
+}
+
+// Close dropdown on click outside
+document.addEventListener('click', () => {
+  const dropdown = document.getElementById('userDropdown');
+  const userInfo = document.querySelector('.user-info');
+  if (dropdown && dropdown.classList.contains('active')) {
+    dropdown.classList.remove('active');
+    userInfo.classList.remove('active');
+  }
+});
+</script>
+{% endblock %}

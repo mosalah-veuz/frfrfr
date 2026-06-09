@@ -1,0 +1,114 @@
+<div class="table-wrap">
+  <div class="reg-list">
+    <div class="reg-list-header reg-list-row">
+      <div class="reg-col-id">ID</div>
+      <div class="reg-col-contact">Contact</div>
+      <div class="reg-col-tickets">Tickets</div>
+      <div class="reg-col-amount">Amount</div>
+      <div class="reg-col-status">Status</div>
+      <div class="reg-col-txn">Transaction</div>
+      <div class="reg-col-date">Date</div>
+      <div class="reg-col-toggle"><span class="sr-only">Details</span></div>
+    </div>
+
+    {% for reg in registrations %}
+    <div class="reg-item">
+      <div class="reg-list-row reg-row" data-reg-id="{{ reg.id }}">
+        <div class="reg-col-id td-mono">REG-{{ reg.id|stringformat:"04d" }}</div>
+        <div class="reg-col-contact">
+          <div class="contact-cell contact-cell--compact">
+            <span class="contact-name">{{ reg.contact_name }}{% if reg.is_guest %} <span class="badge badge-neutral badge-xs">Guest</span>{% endif %}</span>
+            <span class="contact-detail">{{ reg.contact_email }}</span>
+            {% if reg.contact_phone %}
+              <span class="contact-detail">{{ reg.contact_phone }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="reg-col-tickets">
+          <div class="ticket-summary">
+            {% regroup reg.items.all by ticket as ticket_groups %}
+            {% for group in ticket_groups %}
+              <span class="ticket-summary-item ticket-summary-item--{{ group.grouper.name|slugify }}">{{ group.grouper.name }} ×{{ group.list|length }}</span>
+            {% empty %}
+              <span class="text-muted">—</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="reg-col-amount td-mono">{% if reg.total_amount > 0 %}₹{{ reg.total_amount }}{% else %}Free{% endif %}</div>
+        <div class="reg-col-status">
+          <span class="badge badge-status-{{ reg.status }}">{{ reg.get_status_display }}</span>
+        </div>
+        <div class="reg-col-txn">
+          {% if reg.transaction %}
+            <div class="txn-cell">
+              <span class="td-mono txn-ref" title="{{ reg.transaction.razorpay_payment_id|default:reg.transaction.razorpay_order_id }}">
+                {% if reg.transaction.razorpay_payment_id %}{{ reg.transaction.razorpay_payment_id|truncatechars:18 }}{% else %}{{ reg.transaction.razorpay_order_id|truncatechars:18 }}{% endif %}
+              </span>
+              <span class="badge badge-status-{{ reg.transaction.status }}">{{ reg.transaction.status }}</span>
+            </div>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </div>
+        <div class="reg-col-date td-date">{{ reg.created_at|date:"d M Y H:i" }}</div>
+        <div class="reg-col-toggle">
+          {% if reg.items.all %}
+          <button type="button"
+                  class="reg-toggle-btn"
+                  data-target="reg-detail-{{ reg.id }}"
+                  aria-expanded="false"
+                  aria-controls="reg-detail-{{ reg.id }}"
+                  title="View {{ reg.items.all|length }} attendee{{ reg.items.all|length|pluralize }}">
+            <span class="reg-toggle-icon" aria-hidden="true">▸</span>
+            <span class="toggle-label-show sr-only">View attendees</span>
+            <span class="toggle-label-hide sr-only" hidden>Hide attendees</span>
+          </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="reg-detail-row" id="reg-detail-{{ reg.id }}" hidden>
+        <div class="reg-detail-panel">
+          <p class="reg-detail-label">Attendee details</p>
+          <div class="reg-attendee-blocks">
+            {% regroup reg.items.all by ticket as ticket_groups %}
+            {% for group in ticket_groups %}
+            {% with snapshot_price=group.list.0.unit_price %}
+            <div class="horizontal-ticket-block reg-attendee-block">
+              <div class="block-header">
+                <div class="block-title-group">
+                  <h3>{{ group.grouper.name }}</h3>
+                  <span class="block-price-meta">{% if snapshot_price > 0 %}₹{{ snapshot_price }} each{% else %}Free{% endif %}</span>
+                </div>
+                <div class="block-header-actions">
+                  <span class="block-total-badge">{{ group.list|length }} attendee{{ group.list|length|pluralize }}</span>
+                </div>
+              </div>
+              <div class="block-body reg-attendee-block-body">
+                <div class="attendees-grid-3col">
+                  {% for item in group.list %}
+                  <div class="grid-attendee-card">
+                    <div class="att-card-header">
+                      <span class="att-card-num">{{ forloop.counter }}</span>
+                      <span class="att-card-name">{{ item.attendee_name }}</span>
+                    </div>
+                    <div class="att-card-details">
+                      <span class="att-card-email">{{ item.attendee_email }}</span>
+                      {% if item.attendee_phone %}
+                      <span class="att-card-phone">{{ item.attendee_phone }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+            {% endwith %}
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>

@@ -1,0 +1,88 @@
+{% extends "admin_base.html" %}
+{% block title %}{{ action }} Ticket — EventHub{% endblock %}
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>{{ action }} Ticket</h1>
+    <a href="{% url 'ticket_list' %}" class="back-link">← Back to tickets</a>
+  </div>
+</div>
+
+<div class="form-card">
+  <form method="post" id="ticketForm" novalidate>
+    {% csrf_token %}
+    <div class="form-grid">
+      <div class="field field-full">
+        <label for="id_name">Ticket Name <span class="required">*</span></label>
+        {{ form.name }}
+        {% if form.name.errors %}<span class="field-error">{{ form.name.errors.0 }}</span>{% endif %}
+        {% if form.name.help_text %}<small class="field-hint">{{ form.name.help_text }}</small>{% endif %}
+      </div>
+
+      <div class="field">
+        <label for="id_ticket_type">Ticket Type <span class="required">*</span></label>
+        {{ form.ticket_type }}
+        {% if form.ticket_type.errors %}<span class="field-error">{{ form.ticket_type.errors.0 }}</span>{% endif %}
+      </div>
+
+      <div class="field" id="priceField">
+        <label for="id_price">Price (₹) <span class="required">*</span></label>
+        {{ form.price }}
+        {% if form.price.errors %}<span class="field-error">{{ form.price.errors.0 }}</span>{% endif %}
+      </div>
+
+      <div class="field">
+        <label for="id_quantity_type">Quantity Type <span class="required">*</span></label>
+        {{ form.quantity_type }}
+        {% if form.quantity_type.errors %}<span class="field-error">{{ form.quantity_type.errors.0 }}</span>{% endif %}
+      </div>
+
+      <div class="field" id="quantityField">
+        <label for="id_total_quantity">Total Quantity</label>
+        {{ form.total_quantity }}
+        {% if form.total_quantity.errors %}<span class="field-error">{{ form.total_quantity.errors.0 }}</span>{% endif %}
+      </div>
+
+      <div class="field field-full">
+        <label class="checkbox-label">
+          {{ form.duplicate_email }}
+          <span>Allow duplicate email registrations for this ticket</span>
+        </label>
+        <small class="field-hint">When enabled, the same email can register multiple times.</small>
+      </div>
+    </div>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{ action }} Ticket</button>
+      <a href="{% url 'ticket_list' %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+const ticketTypeEl   = document.getElementById('id_ticket_type');
+const quantityTypeEl = document.getElementById('id_quantity_type');
+const priceField     = document.getElementById('priceField');
+const quantityField  = document.getElementById('quantityField');
+const priceInput     = document.getElementById('id_price');
+
+function toggleFields() {
+  const isFree     = ticketTypeEl.value === 'free';
+  const isLimited  = quantityTypeEl.value === 'limited';
+  priceField.style.opacity   = isFree ? '0.4' : '1';
+  priceInput.readOnly        = isFree;
+  if (isFree) priceInput.value = '0';
+  quantityField.style.display = isLimited ? '' : 'none';
+}
+
+ticketTypeEl.addEventListener('change', toggleFields);
+quantityTypeEl.addEventListener('change', toggleFields);
+toggleFields();
+</script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Registration Confirmed — EventHub{% endblock %}
+{% block body %}
+<div class="portal-page">
+  <header class="portal-header">
+    <div class="portal-header-brand" onclick="window.location.href='{% url 'portal' %}'" style="cursor: pointer;">
+      <span class="brand-icon">◈</span>
+      <h1>EventHub</h1>
+    </div>
+    <div class="portal-header-right">
+      <p class="header-subtitle">Your registration has been confirmed</p>
+      {% if request.user.is_authenticated %}
+        <div class="user-profile">
+          <div class="user-info" onclick="toggleUserDropdown(event)">
+            <span class="user-avatar">👤</span>
+            <span class="user-name">{{ request.user.get_full_name|default:request.user.username }}</span>
+            <span class="dropdown-chevron">▼</span>
+          </div>
+          <div class="user-dropdown" id="userDropdown">
+            <a href="{% url 'profile' %}">Profile</a>
+            {% if request.user.is_staff %}
+              <a href="{% url 'admin_dashboard' %}">Admin Dashboard</a>
+            {% endif %}
+            <a href="{% url 'admin_logout' %}">Sign Out</a>
+          </div>
+        </div>
+      {% else %}
+        <a href="{% url 'admin_login' %}" class="btn btn-secondary btn-login-header">Sign In</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="checkout-container confirm-container">
+    <div class="confirm-card">
+      <div class="confirm-icon">✓</div>
+      <h1>You're registered!</h1>
+      <p class="confirm-sub">Confirmation for <strong>{{ registration.contact_name }}</strong></p>
+
+      <div class="confirm-ref">
+        REG-{{ registration.id|stringformat:"04d" }}
+      </div>
+
+      <div class="confirm-items">
+        {% for item in registration.items.all %}
+        <div class="confirm-item">
+          <div class="confirm-item-header">
+            <span class="confirm-ticket-name">{{ item.ticket.name }}</span>
+            <span class="confirm-ticket-price">
+              {% if item.unit_price > 0 %}₹{{ item.unit_price }}{% else %}Free{% endif %}
+            </span>
+          </div>
+          <div class="confirm-attendee">
+            <span>{{ item.attendee_name }}</span>
+            <span class="text-muted">{{ item.attendee_email }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="confirm-total">
+        <span>Total Paid</span>
+        <strong>{% if registration.total_amount > 0 %}₹{{ registration.total_amount }}{% else %}Free{% endif %}</strong>
+      </div>
+
+      {% if registration.transaction %}
+      <div class="confirm-txn">
+        <span class="text-muted">Transaction ID:</span>
+        <span class="td-mono">{{ registration.transaction.razorpay_payment_id }}</span>
+      </div>
+      {% endif %}
+
+      <a href="{% url 'portal' %}" class="btn btn-secondary confirm-back-btn">
+        ← Back to portal
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+// User dropdown toggle
+function toggleUserDropdown(event) {
+  event.stopPropagation();
+  const dropdown = document.getElementById('userDropdown');
+  const userInfo = document.querySelector('.user-info');
+  if (dropdown) dropdown.classList.toggle('active');
+  if (userInfo) userInfo.classList.toggle('active');
+}
+
+// Close dropdown on click outside
+document.addEventListener('click', () => {
+  const dropdown = document.getElementById('userDropdown');
+  const userInfo = document.querySelector('.user-info');
+  if (dropdown && dropdown.classList.contains('active')) {
+    dropdown.classList.remove('active');
+    userInfo.classList.remove('active');
+  }
+});
+</script>
+{% endblock %}

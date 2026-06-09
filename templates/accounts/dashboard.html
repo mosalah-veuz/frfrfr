@@ -1,0 +1,36 @@
+{% extends "admin_base.html" %}
+{% block title %}Dashboard — EventHub{% endblock %}
+{% block admin_content %}
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <span class="page-subtitle">Overview</span>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.total_tickets }}</div>
+    <div class="stat-label">Active Tickets</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.total_registrations }}</div>
+    <div class="stat-label">Completed Registrations</div>
+  </div>
+  <div class="stat-card {% if stats.incomplete > 0 %}stat-card--warn{% endif %}">
+    <div class="stat-value">{{ stats.incomplete }}</div>
+    <div class="stat-label">Incomplete / Stale</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">₹{{ stats.total_revenue }}</div>
+    <div class="stat-label">Total Revenue</div>
+  </div>
+</div>
+
+<div class="quick-actions">
+  <h2>Quick Actions</h2>
+  <div class="action-row">
+    <a href="{% url 'ticket_create' %}" class="btn btn-primary">+ Create Ticket</a>
+    <a href="{% url 'registration_list' %}" class="btn btn-secondary">View Registrations</a>
+    <a href="{% url 'activity_log_list' %}" class="btn btn-secondary">Activity Logs</a>
+  </div>
+</div>
+{% endblock %}

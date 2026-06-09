@@ -1,0 +1,8 @@
+Django==4.2.13
+razorpay==1.4.1
+django-axes==6.4.0
+django-filter==23.5
+python-decouple==3.8
+setuptools<82.0
+Pillow>=11.0.0
+whitenoise==6.6.0

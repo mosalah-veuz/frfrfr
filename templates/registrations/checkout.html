@@ -1,0 +1,528 @@
+{% extends "base.html" %}
+{% block title %}Checkout — EventHub{% endblock %}
+{% block body %}
+<div class="portal-page">
+  <header class="portal-header">
+    <div class="portal-header-brand" onclick="window.location.href='{% url 'portal' %}'" style="cursor: pointer;">
+      <span class="brand-icon">◈</span>
+      <h1>EventHub</h1>
+    </div>
+    <div class="portal-header-right">
+      <p class="header-subtitle">Review your order and complete registration</p>
+      {% if request.user.is_authenticated %}
+        <div class="user-profile">
+          <div class="user-info" onclick="toggleUserDropdown(event)">
+            <span class="user-avatar">👤</span>
+            <span class="user-name">{{ request.user.get_full_name|default:request.user.username }}</span>
+            <span class="dropdown-chevron">▼</span>
+          </div>
+          <div class="user-dropdown" id="userDropdown">
+            <a href="{% url 'profile' %}">Profile</a>
+            {% if request.user.is_staff %}
+              <a href="{% url 'admin_dashboard' %}">Admin Dashboard</a>
+            {% endif %}
+              <a href="{% url 'admin_logout' %}">Sign Out</a>
+          </div>
+        </div>
+      {% else %}
+        <a href="{% url 'admin_login' %}" class="btn btn-secondary btn-login-header">Sign In</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="checkout-container">
+    <div class="back-nav">
+      <a href="{% url 'portal' %}" class="back-link">← Edit Tickets & Attendees</a>
+    </div>
+
+    <!-- Empty state (hidden by default) -->
+    <div id="emptyCheckout" class="empty-state" style="display:none">
+      <p>Your cart is empty. Please select tickets and add attendees first.</p>
+      <a href="{% url 'portal' %}" class="btn btn-primary">Go to Home</a>
+    </div>
+
+    <!-- Main Checkout Layout -->
+    <div id="mainCheckout" class="checkout-layout-v2">
+      <!-- Top Section: Registered Attendees (Full Width) -->
+      <section class="checkout-attendees-section">
+        <h3>Registered Attendees</h3>
+        <div id="attendeesSummaryList" class="attendees-summary-grid-container">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- Bottom Section: Two Columns -->
+      <div class="checkout-bottom-grid">
+        <!-- Left: Billing Form -->
+        <section class="checkout-billing-panel">
+          <div class="form-section">
+            <h3>Billing Contact Details</h3>
+            <p class="section-hint">Provide the primary contact details for this order. Tickets will be sent here.</p>
+            
+            <div class="form-grid" style="margin-bottom: 0;">
+              <div class="field">
+                <label>First Name <span class="required">*</span></label>
+                <input type="text" id="contactFirstName" value="{{ initial.first_name }}" placeholder="John">
+                <span class="field-error" id="err-contact-first_name"></span>
+              </div>
+              <div class="field">
+                <label>Last Name</label>
+                <input type="text" id="contactLastName" value="{{ initial.last_name }}" placeholder="Doe">
+                <span class="field-error" id="err-contact-last_name"></span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Email Address <span class="required">*</span></label>
+              <input type="email" id="contactEmail" value="{{ initial.email }}" placeholder="your@email.com">
+              <span class="field-error" id="err-contact-email"></span>
+            </div>
+            <div class="field">
+              <label>Phone Number <span class="required">*</span></label>
+              <input type="tel" id="contactPhone" value="{{ initial.phone }}">
+              <span class="field-error" id="err-contact-phone"></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Right: Order Summary & Submit -->
+        <section class="checkout-summary-panel">
+          <div class="summary-card">
+            <h3>Order Summary</h3>
+            <div class="summary-items" id="summaryItems">
+              <!-- Dynamically populated -->
+            </div>
+            <div class="summary-total" id="summaryTotal">
+              <!-- Dynamically populated -->
+            </div>
+
+            <!-- Global error -->
+            <div class="alert alert-error" id="globalError" style="display:none; margin-top: 20px;"></div>
+
+            <div class="summary-actions" style="margin-top: 20px;">
+              <button class="btn btn-primary btn-full btn-lg" id="submitBtn" onclick="submitRegistration()">
+                Confirm & Complete Registration
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/css/intlTelInput.css">
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/intlTelInput.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/utils.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+let cart = {};
+
+// ── Load cart from sessionStorage on init ────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  try {
+    const storedCart = sessionStorage.getItem("eventhub_cart");
+    if (storedCart) {
+      cart = JSON.parse(storedCart);
+    }
+  } catch (e) {
+    console.error("Error parsing cart storage:", e);
+  }
+
+  const keys = Object.keys(cart);
+  if (!keys.length) {
+    document.getElementById("emptyCheckout").style.display = "block";
+    document.getElementById("mainCheckout").style.display = "none";
+    return;
+  }
+
+  renderCheckoutSummary();
+  initCheckoutPhone();
+});
+
+// ── Render checkout order & attendee summary ─────────────────────
+function renderCheckoutSummary() {
+  const itemsContainer = document.getElementById("summaryItems");
+  const totalContainer = document.getElementById("summaryTotal");
+  const listContainer = document.getElementById("attendeesSummaryList");
+
+  let summaryHtml = "";
+  let listHtml = "";
+  let total = 0;
+
+  Object.entries(cart).forEach(([ticketId, { ticket, attendees }]) => {
+    const lineTotal = ticket.price * attendees.length;
+    total += lineTotal;
+
+    summaryHtml += `
+      <div class="summary-row">
+        <span>${ticket.name} × ${attendees.length}</span>
+        <span>${ticket.price === 0 ? 'Free' : '₹' + lineTotal.toFixed(2)}</span>
+      </div>
+    `;
+
+    listHtml += `
+      <div class="summary-ticket-group-v2">
+        <h4>${ticket.name}</h4>
+        <div class="attendees-grid-3col">
+    `;
+
+    attendees.forEach((att, idx) => {
+      const fullName = escapeHtml(((att.first_name || '') + ' ' + (att.last_name || '')).trim() || 'Unnamed Attendee');
+      listHtml += `
+        <div class="grid-attendee-card">
+          <div class="att-card-header">
+            <span class="att-card-num">${idx + 1}</span>
+            <span class="att-card-name">${fullName}</span>
+          </div>
+          <div class="att-card-details">
+            <span class="att-card-email">${escapeHtml(att.email || '')}</span>
+            ${att.phone ? `<span class="att-card-phone">${escapeHtml(att.phone)}</span>` : ''}
+          </div>
+        </div>
+      `;
+    });
+
+    listHtml += `
+        </div>
+      </div>
+    `;
+  });
+
+  itemsContainer.innerHTML = summaryHtml;
+  totalContainer.innerHTML = `
+    <span>Total Amount</span>
+    <span>${total === 0 ? 'Free' : '₹' + total.toFixed(2)}</span>
+  `;
+  listContainer.innerHTML = listHtml;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// ── Submit Registration ──────────────────────────────────────────
+function clearErrors() {
+  document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+  document.getElementById('globalError').style.display = 'none';
+}
+
+function showGlobalError(msg) {
+  const el = document.getElementById('globalError');
+  el.textContent = msg;
+  el.style.display = '';
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function submitRegistration() {
+  clearErrors();
+
+  const first_name = document.getElementById('contactFirstName').value.trim();
+  const last_name = document.getElementById('contactLastName').value.trim();
+  const email = document.getElementById('contactEmail').value.trim();
+  const phone = checkoutIti ? checkoutIti.getNumber().trim() : document.getElementById('contactPhone').value.trim();
+  const isPhoneValid = checkoutIti ? checkoutIti.isValidNumber() : true;
+
+  if (!first_name || !email || !phone) {
+    if (!first_name) document.getElementById('err-contact-first_name').textContent = 'First name is required.';
+    if (!email) document.getElementById('err-contact-email').textContent = 'Email is required.';
+    if (!phone) document.getElementById('err-contact-phone').textContent = 'Phone is required.';
+    showGlobalError('Please fill in all required contact details.');
+    return;
+  }
+
+  if (!isPhoneValid) {
+    document.getElementById('err-contact-phone').textContent = 'Enter a valid phone number.';
+    showGlobalError('Please correct the validation errors on the form.');
+    return;
+  }
+
+  const contact = { first_name, last_name, email, phone };
+
+  const items = Object.entries(cart).map(([ticketId, { ticket, attendees }]) => ({
+    ticket_id: parseInt(ticketId),
+    attendees,
+  }));
+
+  if (!items.length) {
+    showGlobalError('Please add at least one ticket.');
+    return;
+  }
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Processing…';
+
+  try {
+    const res = await fetch('/register/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ contact, items }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      handleErrors(data.errors || {});
+      return;
+    }
+
+    // Clear cart upon successful database creation
+    sessionStorage.removeItem("eventhub_cart");
+
+    if (data.payment) {
+      launchRazorpay(data);
+    } else {
+      window.location.href = data.redirect;
+    }
+  } catch (err) {
+    showGlobalError('Network error. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirm & Complete Registration';
+  }
+}
+
+function handleErrors(errors) {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = false;
+  btn.textContent = 'Confirm & Complete Registration';
+
+  if (errors.contact) {
+    Object.entries(errors.contact).forEach(([field, msgs]) => {
+      const el = document.getElementById(`err-contact-${field}`);
+      if (el) el.textContent = Array.isArray(msgs) ? msgs[0] : msgs;
+    });
+  }
+  
+  if (errors.items) {
+    if (typeof errors.items === 'string') {
+      showGlobalError(errors.items);
+      return;
+    }
+    // For item errors, since attendees were inputted on portal page, we show a general warning to go back
+    showGlobalError('There are validation errors with your attendee details. Please click the edit link above to check them.');
+  }
+  
+  if (errors.type === 'duplicate_email') {
+    let msg = 'Duplicate email detected:\n';
+    Object.entries(errors.conflicts).forEach(([ticket, emails]) => {
+      msg += `• ${ticket}: ${emails.join(', ')}\n`;
+    });
+    showGlobalError(msg + ' Please go back and correct attendee emails.');
+  }
+  
+  if (errors.sold_out) showGlobalError(errors.sold_out);
+  if (errors.unavailable) showGlobalError(errors.unavailable);
+  if (errors.server) showGlobalError(errors.server);
+}
+
+// ── Razorpay ─────────────────────────────────────────────────────
+function launchRazorpay(data) {
+  const options = {
+    key: data.key_id,
+    amount: data.amount,
+    currency: 'INR',
+    order_id: data.order_id,
+    name: 'EventHub',
+    description: 'Event Registration',
+    prefill: {
+      name: data.name,
+      email: data.email,
+      contact: data.phone,
+    },
+    handler: async function(response) {
+      try {
+        const res = await fetch('/payment/callback/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken'),
+          },
+          body: JSON.stringify({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          window.location.href = result.redirect;
+        } else {
+          showGlobalError(result.error || 'Payment verification failed.');
+        }
+      } catch (e) {
+        showGlobalError('Network error during payment verification.');
+      }
+    },
+    modal: {
+      ondismiss: function() {
+        showGlobalError('Payment cancelled. You can try again.');
+      }
+    }
+  };
+  const rzp = new Razorpay(options);
+  rzp.open();
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : null;
+}
+
+// User dropdown toggle
+function toggleUserDropdown(event) {
+  event.stopPropagation();
+  const dropdown = document.getElementById('userDropdown');
+  const userInfo = document.querySelector('.user-info');
+  if (dropdown) dropdown.classList.toggle('active');
+  if (userInfo) userInfo.classList.toggle('active');
+}
+
+// Close dropdown on click outside
+document.addEventListener('click', () => {
+  const dropdown = document.getElementById('userDropdown');
+  const userInfo = document.querySelector('.user-info');
+  if (dropdown && dropdown.classList.contains('active')) {
+    dropdown.classList.remove('active');
+    userInfo.classList.remove('active');
+  }
+});
+
+// Progressive formatter for local numbers
+function formatProgressive(digits, countryCode) {
+  if (!digits) return "";
+  
+  if (countryCode === 'in') {
+    // India: XXXXX XXXXX (max 10 digits)
+    const cleanDigits = digits.slice(0, 10);
+    if (cleanDigits.length > 5) {
+      return cleanDigits.slice(0, 5) + " " + cleanDigits.slice(5);
+    }
+    return cleanDigits;
+  }
+  
+  if (countryCode === 'us') {
+    // US: (XXX) XXX-XXXX (max 10 digits)
+    const cleanDigits = digits.slice(0, 10);
+    if (cleanDigits.length === 0) return "";
+    let res = "";
+    if (cleanDigits.length <= 3) {
+      res = "(" + cleanDigits;
+    } else if (cleanDigits.length <= 6) {
+      res = "(" + cleanDigits.slice(0, 3) + ") " + cleanDigits.slice(3);
+    } else {
+      res = "(" + cleanDigits.slice(0, 3) + ") " + cleanDigits.slice(3, 6) + "-" + cleanDigits.slice(6);
+    }
+    return res;
+  }
+  
+  if (countryCode === 'gb') {
+    // UK Mobile: XXXXX XXXXXX (max 11 digits)
+    const cleanDigits = digits.slice(0, 11);
+    if (cleanDigits.length > 5) {
+      return cleanDigits.slice(0, 5) + " " + cleanDigits.slice(5);
+    }
+    return cleanDigits;
+  }
+
+  // Fallback for other countries
+  const cleanDigits = digits.slice(0, 15);
+  if (window.intlTelInputUtils) {
+    try {
+      const formatted = intlTelInputUtils.formatNumber(cleanDigits, countryCode, intlTelInputUtils.numberFormat.NATIONAL);
+      if (formatted) return formatted;
+    } catch (e) {}
+  }
+  return cleanDigits;
+}
+
+let checkoutIti;
+
+function initCheckoutPhone() {
+  const phoneInput = document.getElementById('contactPhone');
+  if (!phoneInput) return;
+
+  checkoutIti = window.intlTelInput(phoneInput, {
+    initialCountry: "in",
+    preferredCountries: ["in", "us", "gb"],
+    separateDialCode: true,
+    dropdownContainer: document.body,
+    utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/utils.js"
+  });
+
+  let lastVal = phoneInput.value;
+  const formatPhone = () => {
+    try {
+      const currentVal = phoneInput.value;
+      const countryData = checkoutIti.getSelectedCountryData();
+      if (countryData && countryData.iso2) {
+        const cleanVal = currentVal.replace(/\D/g, '');
+        
+        // Enforce strict country-specific digit limit
+        let maxLen = 15;
+        if (countryData.iso2 === 'in' || countryData.iso2 === 'us') maxLen = 10;
+        else if (countryData.iso2 === 'gb') maxLen = 11;
+        
+        if (cleanVal.length > maxLen) {
+          phoneInput.value = lastVal;
+          return;
+        }
+
+        const formatted = formatProgressive(cleanVal, countryData.iso2);
+        if (formatted !== currentVal) {
+          const selectionEnd = phoneInput.selectionEnd;
+          const lengthDiff = formatted.length - currentVal.length;
+          phoneInput.value = formatted;
+          lastVal = formatted;
+          const newPos = Math.max(0, selectionEnd + lengthDiff);
+          phoneInput.setSelectionRange(newPos, newPos);
+        } else {
+          lastVal = currentVal;
+        }
+      }
+    } catch (err) {
+      console.error("Error formatting phone:", err);
+    }
+  };
+
+  phoneInput.addEventListener('input', () => {
+    document.getElementById('err-contact-phone').textContent = '';
+    const currentVal = phoneInput.value;
+    if (currentVal.length > lastVal.length) {
+      formatPhone();
+    } else {
+      lastVal = currentVal;
+    }
+  });
+
+  phoneInput.addEventListener('countrychange', formatPhone);
+
+  if (phoneInput.value) {
+    if (window.intlTelInputUtils) {
+      formatPhone();
+    } else {
+      const interval = setInterval(() => {
+        if (window.intlTelInputUtils) {
+          formatPhone();
+          clearInterval(interval);
+        }
+      }, 100);
+    }
+  }
+}
+</script>
+{% endblock %}

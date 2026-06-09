@@ -1,0 +1,68 @@
+{% extends "admin_base.html" %}
+{% block title %}Activity Logs — EventHub{% endblock %}
+{% block admin_content %}
+<div class="page-header">
+  <h1>Activity Logs</h1>
+  <span class="page-subtitle">Last 200 entries</span>
+</div>
+
+<div class="filter-bar">
+  <p class="filter-bar-title">Filter activity logs</p>
+  <form method="get" class="filter-form">
+    <div class="filter-field">
+      <label for="{{ filter.form.action.id_for_label }}">Action</label>
+      {{ filter.form.action }}
+    </div>
+    <div class="filter-field">
+      <label for="{{ filter.form.date_from.id_for_label }}">From date</label>
+      {{ filter.form.date_from }}
+    </div>
+    <div class="filter-field">
+      <label for="{{ filter.form.date_to.id_for_label }}">To date</label>
+      {{ filter.form.date_to }}
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-sm btn-secondary">Apply filters</button>
+      <a href="{% url 'activity_log_list' %}" class="btn btn-sm btn-ghost">Clear</a>
+    </div>
+  </form>
+</div>
+
+{% if logs %}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Actor</th>
+        <th>Action</th>
+        <th>Target</th>
+        <th>IP</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td class="td-mono td-date">{{ log.timestamp|date:"d M Y H:i:s" }}</td>
+        <td>{{ log.actor.username|default:"—" }}</td>
+        <td><span class="badge badge-action">{{ log.get_action_display }}</span></td>
+        <td>{{ log.target|default:"—" }}</td>
+        <td class="td-mono">{{ log.ip_address|default:"—" }}</td>
+        <td>
+          {% if log.metadata %}
+            <details class="meta-details">
+              <summary>View</summary>
+              <pre class="meta-pre">{{ log.metadata }}</pre>
+            </details>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="empty-state"><p>No activity logs found.</p></div>
+{% endif %}
+{% endblock %}

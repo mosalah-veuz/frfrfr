@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Sign In — EventHub{% endblock %}
+{% block body %}
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-header">
+      <span class="brand-icon lg">◈</span>
+      <h1>EventHub</h1>
+      <p>Sign in to your account</p>
+    </div>
+
+    {% if locked %}
+      <div class="alert alert-error">
+        Account temporarily locked after too many failed attempts. Try again later.
+      </div>
+    {% endif %}
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post" id="loginForm" novalidate>
+      {% csrf_token %}
+      <div class="field">
+        <label for="id_username">Username</label>
+        {{ form.username }}
+        {% if form.username.errors %}
+          <span class="field-error">{{ form.username.errors.0 }}</span>
+        {% endif %}
+      </div>
+      <div class="field">
+        <label for="id_password">Password</label>
+        {{ form.password }}
+        {% if form.password.errors %}
+          <span class="field-error">{{ form.password.errors.0 }}</span>
+        {% endif %}
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
