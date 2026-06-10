@@ -72,3 +72,8 @@ ActivityLog (append-only audit trail)
 2. Get test Key ID and Secret from Dashboard → Settings → API Keys
 3. Add to `.env`
 4. Use test card: 4111 1111 1111 1111, any future date, any CVV
+
+
+.\venv\Scripts\celery.exe -A config worker --loglevel=info -P solo
+.\venv\Scripts\celery.exe -A config beat --loglevel=info
+"# frfrfr" 
