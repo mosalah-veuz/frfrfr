@@ -5,6 +5,7 @@ from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.contrib.auth.decorators import login_required
 
 from apps.activity.utils import log_action
 from apps.registrations.models import Registration
@@ -123,3 +124,22 @@ def razorpay_webhook(request):
             pass
 
     return HttpResponse(status=200)
+
+
+@login_required
+def payment_list(request):
+    """Admin dashboard view displaying list of Razorpay transactions."""
+    if not request.user.is_staff:
+        return redirect('admin_login')
+
+    from .selectors import get_transactions_selector
+    from .filters import TransactionFilter
+
+    qs = get_transactions_selector()
+    f = TransactionFilter(request.GET, queryset=qs)
+    transactions = f.qs
+
+    return render(request, 'payments/list.html', {
+        'filter':       f,
+        'transactions': transactions,
+    })

@@ -7,13 +7,15 @@ from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.http import require_POST
 from django.utils import timezone
-import django_filters
 from django import forms
 
 from apps.activity.utils import log_action
 from apps.tickets.models import Ticket
+from apps.tickets.selectors import get_active_tickets_with_counts_selector
 from .models import Registration, RegistrationItem
 from .forms import ContactForm, AttendeeForm, RegistrationItemForm
+from .filters import RegistrationFilter
+from .selectors import get_registration_items_selector
 from .services import (
     create_registration,
     DuplicateEmailError,
@@ -28,7 +30,14 @@ logger = logging.getLogger(__name__)
 
 def portal(request):
     """Public ticket listing page."""
-    tickets = Ticket.objects.filter(is_active=True).order_by('ticket_type', 'price')
+    tickets = get_active_tickets_with_counts_selector()
+    return render(request, 'registrations/portal.html', {
+        'tickets': tickets,
+    })
+
+
+def attendee_details(request):
+    """Page where users input attendee details for their selected tickets."""
     initial = {}
     if request.user.is_authenticated:
         initial = {
@@ -36,15 +45,14 @@ def portal(request):
             'last_name':  request.user.last_name,
             'email':      request.user.email,
         }
-    return render(request, 'registrations/portal.html', {
-        'tickets': tickets,
+    return render(request, 'registrations/attendees.html', {
         'initial': initial,
     })
 
 
 def checkout(request):
     """Public checkout page where user confirms tickets and enters contact info to register."""
-    tickets = Ticket.objects.filter(is_active=True).order_by('ticket_type', 'price')
+    tickets = get_active_tickets_with_counts_selector()
     initial = {}
     if request.user.is_authenticated:
         phone = ''
@@ -74,12 +82,6 @@ def register(request):
         return JsonResponse({'error': 'Invalid request.'}, status=400)
 
     dry_run = data.get('dry_run', False)
-
-    # --- Validate contact (only if not dry run) ---
-    if not dry_run:
-        contact_form = ContactForm(data.get('contact', {}))
-        if not contact_form.is_valid():
-            return JsonResponse({'errors': {'contact': contact_form.errors}}, status=400)
 
     # --- Validate items ---
     raw_items = data.get('items', [])
@@ -142,6 +144,35 @@ def register(request):
     if item_errors:
         return JsonResponse({'errors': {'items': item_errors}}, status=400)
 
+    # Determine if registration is free
+    is_free = all(item['ticket'].price == 0 for item in validated_items)
+
+    # --- Validate contact (only if not dry run) ---
+    if not dry_run:
+        raw_contact = data.get('contact', {})
+        if is_free:
+            # Default missing fields to the first attendee's details
+            if not raw_contact.get('first_name') or not raw_contact.get('email'):
+                first_att = validated_items[0]['attendees'][0]
+                name_parts = first_att['name'].split(' ', 1)
+                first_name = name_parts[0]
+                last_name = name_parts[1] if len(name_parts) > 1 else ''
+                raw_contact = {
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'email': first_att['email'],
+                    'phone': first_att.get('phone', '') or '+910000000000',
+                }
+            elif not raw_contact.get('phone'):
+                raw_contact['phone'] = '+910000000000'
+
+        contact_form = ContactForm(raw_contact)
+        if is_free:
+            contact_form.fields['phone'].required = False
+
+        if not contact_form.is_valid():
+            return JsonResponse({'errors': {'contact': contact_form.errors}}, status=400)
+
     # --- Business constraints check (even for dry run) ---
     # 1. Event-wide duplicate email check
     try:
@@ -155,7 +186,14 @@ def register(request):
                     row_errors = {}
                     for i, att in enumerate(item['attendees']):
                         if att['email'].lower() in blocked_list:
-                            row_errors[i] = {'email': f"This email has already been registered for {t_name}."}
+                            if item['ticket'].duplicate_email:
+                                # This ticket allows duplicates, but the email is blocked
+                                # because it was registered under a restricted ticket type.
+                                row_errors[i] = {'email': "This email is already registered for a ticket that does not allow duplicate registrations."}
+                            else:
+                                # This ticket itself does not allow duplicates,
+                                # and the email already appears in a completed registration anywhere on the event.
+                                row_errors[i] = {'email': "This email address has already been registered for this event and cannot be used again."}
                     if row_errors:
                         item_errors[idx] = {'attendees': row_errors}
             if item_errors:
@@ -168,11 +206,11 @@ def register(request):
         ticket = item['ticket']
         if ticket.quantity_type == 'unlimited':
             continue
-        sold = ticket.sold_count
         requested = len(item['attendees'])
-        available = ticket.total_quantity - sold
+        available = ticket.available_count
         if requested > available:
             return JsonResponse({'errors': {'global': f"'{ticket.name}' is sold out. Available slots left: {available}."}}, status=400)
+
 
     if dry_run:
         return JsonResponse({'success': True, 'valid': True})
@@ -247,62 +285,23 @@ def confirmation(request, pk):
 
 # ─── Admin views ─────────────────────────────────────────────────
 
-class RegistrationFilter(django_filters.FilterSet):
-    status = django_filters.ChoiceFilter(
-        choices=Registration.STATUS_CHOICES,
-        empty_label='All statuses',
-        label='Status',
-    )
-    email = django_filters.CharFilter(
-        field_name='contact_email',
-        lookup_expr='icontains',
-        label='Contact email',
-        widget=forms.TextInput(attrs={'placeholder': 'Search by email…'}),
-    )
-    ticket = django_filters.ModelChoiceFilter(
-        queryset=Ticket.objects.filter(is_active=True),
-        field_name='items__ticket',
-        distinct=True,
-        empty_label='All ticket types',
-        label='Ticket type',
-    )
-    date_from = django_filters.DateFilter(
-        field_name='created_at',
-        lookup_expr='gte',
-        label='From date',
-        widget=forms.DateInput(attrs={'type': 'date'}),
-    )
-    date_to = django_filters.DateFilter(
-        field_name='created_at',
-        lookup_expr='lte',
-        label='To date',
-        widget=forms.DateInput(attrs={'type': 'date'}),
-    )
-
-    class Meta:
-        model  = Registration
-        fields = ['status', 'email', 'ticket', 'date_from', 'date_to']
-
 
 @login_required
 def registration_list(request):
     if not request.user.is_staff:
         return redirect('admin_login')
 
-    qs = Registration.objects.prefetch_related(
-        Prefetch(
-            'items',
-            queryset=RegistrationItem.objects.select_related('ticket').order_by('ticket_id'),
-        ),
-        'transaction',
-    ).order_by('-created_at')
+    qs = get_registration_items_selector()
 
     f = RegistrationFilter(request.GET, queryset=qs)
 
     # Incomplete = stale pending/processing older than 30 min
     cutoff     = timezone.now() - timezone.timedelta(minutes=30)
-    completed  = f.qs.filter(status='completed')
-    incomplete = f.qs.filter(status__in=['pending', 'processing'], created_at__lte=cutoff)
+    completed  = f.qs.filter(registration__status='completed')
+    incomplete = f.qs.filter(
+        registration__status__in=['pending', 'processing'],
+        registration__created_at__lte=cutoff
+    )
     all_regs   = f.qs
 
     return render(request, 'registrations/list.html', {

@@ -38,9 +38,15 @@
       </div>
 
       <div class="field" id="quantityField">
-        <label for="id_total_quantity">Total Quantity</label>
-        {{ form.total_quantity }}
-        {% if form.total_quantity.errors %}<span class="field-error">{{ form.total_quantity.errors.0 }}</span>{% endif %}
+        {% if form.instance.pk %}
+          <div style="margin-bottom: 12px; font-size: 13.5px; color: var(--text2);">
+            <strong>Tickets Sold:</strong> {{ form.instance.sold_count }}
+          </div>
+        {% endif %}
+        <label for="id_available_quantity">Tickets Available for Purchase <span class="required">*</span></label>
+        {{ form.available_quantity }}
+        {% if form.available_quantity.errors %}<span class="field-error">{{ form.available_quantity.errors.0 }}</span>{% endif %}
+        <small class="field-hint">Number of additional seats/tickets currently active for purchase.</small>
       </div>
 
       <div class="field field-full">

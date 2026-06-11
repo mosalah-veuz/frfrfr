@@ -38,7 +38,7 @@ class ContactForm(forms.Form):
 
     def clean_phone(self):
         phone = self.cleaned_data.get('phone', '').strip()
-        return clean_international_phone(phone, required=True)
+        return clean_international_phone(phone, required=self.fields['phone'].required)
 
     def clean_email(self):
         return self.cleaned_data['email'].lower().strip()
@@ -48,11 +48,11 @@ class AttendeeForm(forms.Form):
     first_name = forms.CharField(max_length=100, error_messages={'required': 'First name is required.'})
     last_name  = forms.CharField(max_length=100, required=False)
     email      = forms.EmailField()
-    phone      = forms.CharField(max_length=20, required=False)
+    phone      = forms.CharField(max_length=20)
 
     def clean_phone(self):
         phone = self.cleaned_data.get('phone', '').strip()
-        return clean_international_phone(phone, required=False)
+        return clean_international_phone(phone, required=True)
 
     def clean_email(self):
         return self.cleaned_data['email'].lower().strip()

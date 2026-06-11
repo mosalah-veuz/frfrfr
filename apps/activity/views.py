@@ -14,13 +14,13 @@ class ActivityLogFilter(django_filters.FilterSet):
     )
     date_from = django_filters.DateFilter(
         field_name='timestamp',
-        lookup_expr='gte',
+        lookup_expr='date__gte',
         label='From date',
         widget=forms.DateInput(attrs={'type': 'date'}),
     )
     date_to   = django_filters.DateFilter(
         field_name='timestamp',
-        lookup_expr='lte',
+        lookup_expr='date__lte',
         label='To date',
         widget=forms.DateInput(attrs={'type': 'date'}),
     )

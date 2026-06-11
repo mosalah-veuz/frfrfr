@@ -1,0 +1,536 @@
+{% extends "base.html" %}
+{% block title %}Attendee Details — EventHub{% endblock %}
+{% block body %}
+<div class="portal-page">
+  <header class="portal-header">
+    <div class="portal-header-brand" onclick="window.location.href='{% url 'portal' %}'" style="cursor: pointer;">
+      <span class="brand-icon">◈</span>
+      <h1>EventHub</h1>
+    </div>
+    <div class="portal-header-right">
+      <p class="header-subtitle">Provide attendee details for your selected tickets</p>
+      {% if request.user.is_authenticated %}
+        <div class="user-profile">
+          <div class="user-info" onclick="toggleUserDropdown(event)">
+            <span class="user-avatar">👤</span>
+            <span class="user-name">{{ request.user.get_full_name|default:request.user.username }}</span>
+            <span class="dropdown-chevron">▼</span>
+          </div>
+          <div class="user-dropdown" id="userDropdown">
+            <a href="{% url 'profile' %}">Profile</a>
+            <a href="{% url 'admin_logout' %}">Sign Out</a>
+          </div>
+        </div>
+      {% else %}
+        <a href="{% url 'login' %}{% if request.path %}?next={{ request.path }}{% endif %}" class="btn btn-ghost btn-login-header">Sign In</a>
+        <a href="{% url 'signup' %}{% if request.path %}?next={{ request.path }}{% endif %}" class="btn btn-secondary btn-login-header">Sign Up</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="portal-layout portal-layout--single">
+    <!-- Selected Tickets Panel -->
+    <section class="selected-tickets-section">
+      <div class="back-nav">
+        <a href="{% url 'portal' %}" class="back-link">← Back to Ticket Selection</a>
+      </div>
+      <div class="section-header-flex">
+        <h2>Attendee Details</h2>
+      </div>
+
+      <!-- Empty State / Prompt to Add -->
+      <div id="emptyPortalState" class="empty-state">
+        <p>No tickets selected yet. Please go back to select tickets.</p>
+        <a href="{% url 'portal' %}" class="btn btn-primary btn-lg">
+          Select Tickets
+        </a>
+      </div>
+
+      <!-- Selected Ticket Blocks Container (Full-Width Horizontal Bars) -->
+      <div id="selectedTicketsList" class="selected-tickets-list">
+        <!-- Dynamically populated -->
+      </div>
+
+      <!-- Global error banner -->
+      <div class="alert alert-error" id="portalGlobalError" style="display:none; margin-top: 20px; margin-bottom: 20px;"></div>
+
+      <!-- Bottom actions -->
+      <div id="portalActions" class="portal-actions" style="display:none">
+        <button class="btn btn-primary btn-lg btn-proceed" onclick="proceedToCheckout()">
+          Proceed to Checkout →
+        </button>
+      </div>
+    </section>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/css/intlTelInput.css">
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/intlTelInput.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/utils.js"></script>
+<script>
+// ── State ────────────────────────────────────────────────────────
+let cart = {}; // { ticketId: { ticket: {}, attendees: [] } }
+
+// ── Lifecycle ────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  try {
+    const storedCart = sessionStorage.getItem("eventhub_cart");
+    if (storedCart) {
+      cart = JSON.parse(storedCart);
+    }
+  } catch (e) {
+    console.error("Error loading cart:", e);
+  }
+  renderPortal();
+});
+
+// Helper to save cart state to sessionStorage
+function saveCart() {
+  sessionStorage.setItem("eventhub_cart", JSON.stringify(cart));
+}
+
+// ── Cart Operations ──────────────────────────────────────────────
+function updateAttendeeValue(ticketId, idx, field, value) {
+  if (cart[ticketId] && cart[ticketId].attendees[idx]) {
+    cart[ticketId].attendees[idx][field] = value;
+    saveCart();
+  }
+}
+
+function addAttendeeRow(ticketId) {
+  if (cart[ticketId]) {
+    cart[ticketId].attendees.push({ first_name: '', last_name: '', email: '', phone: '' });
+    saveCart();
+    renderPortal();
+  }
+}
+
+function removeAttendeeRow(ticketId, idx) {
+  if (cart[ticketId]) {
+    cart[ticketId].attendees.splice(idx, 1);
+    if (cart[ticketId].attendees.length === 0) {
+      delete cart[ticketId];
+    }
+    saveCart();
+    renderPortal();
+  }
+}
+
+function removeTicketTypeBlock(ticketId) {
+  if (cart[ticketId]) {
+    delete cart[ticketId];
+    saveCart();
+    renderPortal();
+  }
+}
+
+// ── Render selected blocks ───────────────────────────────────────
+function renderPortal() {
+  const emptyState = document.getElementById('emptyPortalState');
+  const ticketsList = document.getElementById('selectedTicketsList');
+  const portalActions = document.getElementById('portalActions');
+  const keys = Object.keys(cart);
+
+  if (!keys.length) {
+    emptyState.style.display = 'block';
+    ticketsList.innerHTML = '';
+    portalActions.style.display = 'none';
+    return;
+  }
+
+  emptyState.style.display = 'none';
+  portalActions.style.display = 'flex';
+
+  let html = '';
+  keys.forEach(ticketId => {
+    const { ticket, attendees } = cart[ticketId];
+    const ticketTotal = ticket.price * attendees.length;
+
+    html += `
+      <div class="horizontal-ticket-block" data-ticket-id="${ticketId}">
+        <div class="block-header">
+          <div class="block-title-group">
+            <h3>${ticket.name}</h3>
+            ${ticket.price === 0 ? '<span class="badge badge-xs badge-free">Free</span>' : ''}
+            ${ticket.price > 0 ? '<span class="block-price-meta">₹' + ticket.price.toFixed(2) + ' each</span>' : ''}
+          </div>
+          <div class="block-header-actions">
+            <span class="block-total-badge">
+              Subtotal: ${ticketTotal === 0 ? 'Free' : '₹' + ticketTotal.toFixed(2)}
+            </span>
+            <button class="btn btn-xs btn-danger" onclick="removeTicketTypeBlock(${ticketId})">
+              Remove Ticket Type
+            </button>
+          </div>
+        </div>
+
+        <div class="block-body">
+          <div class="attendee-rows-container">
+    `;
+
+    attendees.forEach((att, idx) => {
+      html += `
+        <div class="horizontal-attendee-row" data-index="${idx}">
+          <div class="row-number-badge">
+            Attendee ${idx + 1}
+          </div>
+          
+          <div class="row-inputs-grid">
+            <div class="field">
+              <input type="text" placeholder="First Name *" 
+                     value="${att.first_name || ''}"
+                     oninput="updateAttendeeValue(${ticketId}, ${idx}, 'first_name', this.value)">
+              <span class="field-error" id="err-att-${ticketId}-${idx}-first_name"></span>
+            </div>
+            
+            <div class="field">
+              <input type="text" placeholder="Last Name" 
+                     value="${att.last_name || ''}"
+                     oninput="updateAttendeeValue(${ticketId}, ${idx}, 'last_name', this.value)">
+              <span class="field-error" id="err-att-${ticketId}-${idx}-last_name"></span>
+            </div>
+            
+            <div class="field">
+              <input type="email" placeholder="Email Address *" 
+                     value="${att.email || ''}"
+                     oninput="updateAttendeeValue(${ticketId}, ${idx}, 'email', this.value)">
+              <span class="field-error" id="err-att-${ticketId}-${idx}-email"></span>
+            </div>
+            
+            <div class="field">
+              <input type="tel" placeholder="Phone Number *" 
+                     value="${att.phone || ''}"
+                     data-ticket-id="${ticketId}"
+                     data-index="${idx}">
+              <span class="field-error" id="err-att-${ticketId}-${idx}-phone"></span>
+            </div>
+          </div>
+
+          <div class="row-actions">
+            <button class="btn-remove-row" onclick="removeAttendeeRow(${ticketId}, ${idx})" title="Remove Attendee">
+              &times;
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    html += `
+          </div>
+          <div class="block-footer">
+            <button class="btn btn-sm btn-ghost" onclick="addAttendeeRow(${ticketId})">
+              + Add another attendee for ${ticket.name}
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  ticketsList.innerHTML = html;
+  initPhoneInputs();
+}
+
+// ── Proceed to Checkout ──────────────────────────────────────────
+async function proceedToCheckout() {
+  const keys = Object.keys(cart);
+  if (!keys.length) {
+    alert("Please select at least one ticket type.");
+    return;
+  }
+
+  // Clear previous inline errors
+  document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+  const globalErrorEl = document.getElementById('portalGlobalError');
+  globalErrorEl.style.display = 'none';
+
+  // Basic check for empty fields first to avoid redundant API request
+  let localValid = true;
+  keys.forEach(ticketId => {
+    const { ticket, attendees } = cart[ticketId];
+    attendees.forEach((att, idx) => {
+      if (!att.first_name || !att.first_name.trim()) {
+        localValid = false;
+        document.getElementById(`err-att-${ticketId}-${idx}-first_name`).textContent = 'First name is required.';
+      }
+      if (!att.email || !att.email.trim()) {
+        localValid = false;
+        document.getElementById(`err-att-${ticketId}-${idx}-email`).textContent = 'Email is required.';
+      }
+      
+      const key = `${ticketId}-${idx}`;
+      const iti = window.portalItiInstances[key];
+      if (iti) {
+        const phoneVal = iti.getNumber().trim();
+        updateAttendeeValue(ticketId, idx, 'phone', phoneVal);
+        if (!phoneVal) {
+          localValid = false;
+          document.getElementById(`err-att-${ticketId}-${idx}-phone`).textContent = 'Phone number is required.';
+        } else if (!iti.isValidNumber()) {
+          localValid = false;
+          document.getElementById(`err-att-${ticketId}-${idx}-phone`).textContent = 'Enter a valid phone number.';
+        }
+      }
+    });
+  });
+
+  if (!localValid) {
+    globalErrorEl.textContent = 'Please fill out all required fields and correct any phone number errors.';
+    globalErrorEl.style.display = '';
+    globalErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  const btn = document.querySelector('.btn-proceed');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Validating…';
+
+  const items = Object.entries(cart).map(([ticketId, { ticket, attendees }]) => ({
+    ticket_id: parseInt(ticketId),
+    attendees,
+  }));
+
+  try {
+    const res = await fetch('/register/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ items, dry_run: true }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      handlePortalErrors(data.errors || {});
+      return;
+    }
+
+    // Validation succeeded! Store selection and redirect
+    sessionStorage.setItem("eventhub_cart", JSON.stringify(cart));
+    window.location.href = "{% url 'checkout' %}";
+  } catch (err) {
+    globalErrorEl.textContent = 'Network error. Please try again.';
+    globalErrorEl.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+function handlePortalErrors(errors) {
+  const globalErrorEl = document.getElementById('portalGlobalError');
+  
+  if (errors.global) {
+    globalErrorEl.textContent = errors.global;
+    globalErrorEl.style.display = '';
+    globalErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  if (errors.items) {
+    if (typeof errors.items === 'string') {
+      globalErrorEl.textContent = errors.items;
+      globalErrorEl.style.display = '';
+      return;
+    }
+
+    let firstErrorEl = null;
+
+    Object.entries(errors.items).forEach(([itemIdx, itemErr]) => {
+      if (itemErr.attendees && typeof itemErr.attendees === 'object') {
+        Object.entries(itemErr.attendees).forEach(([attIdx, attErr]) => {
+          // Map index back to real ticket ID
+          const ticketIds = Object.keys(cart);
+          const ticketId = ticketIds[parseInt(itemIdx)];
+          
+          if (ticketId && attErr) {
+            Object.entries(attErr).forEach(([field, msg]) => {
+              const elId = `err-att-${ticketId}-${attIdx}-${field}`;
+              const el = document.getElementById(elId);
+              if (el) {
+                el.textContent = Array.isArray(msg) ? msg[0] : msg;
+                if (!firstErrorEl) firstErrorEl = el;
+              }
+            });
+          }
+        });
+      }
+    });
+
+    if (firstErrorEl) {
+      firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      globalErrorEl.textContent = 'Please correct the errors on the attendee forms.';
+      globalErrorEl.style.display = '';
+    }
+  }
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : null;
+}
+
+// User dropdown toggle
+function toggleUserDropdown(event) {
+  event.stopPropagation();
+  const dropdown = document.getElementById('userDropdown');
+  const userInfo = document.querySelector('.user-info');
+  if (dropdown) dropdown.classList.toggle('active');
+  if (userInfo) userInfo.classList.toggle('active');
+}
+
+// Close dropdown on click outside
+document.addEventListener('click', () => {
+  const dropdown = document.getElementById('userDropdown');
+  const userInfo = document.querySelector('.user-info');
+  if (dropdown && dropdown.classList.contains('active')) {
+    dropdown.classList.remove('active');
+    userInfo.classList.remove('active');
+  }
+});
+
+/**
+ * Format phone digits for display using E.164 technique.
+ * By prepending '+dialCode' and passing null as region, libphonenumber
+ * formats in TRUE national style — no trunk prefix (no leading 0) for
+ * any country. Falls back to progressive spacing for incomplete numbers.
+ */
+function formatPhoneDisplay(digits, dialCode, countryCode) {
+  if (!digits) return "";
+
+  // Max subscriber digit limits per country
+  const maxLen = { in: 10, us: 10, ca: 10, au: 9, gb: 10 };
+  const limit = maxLen[countryCode] || 15;
+  const safeDigits = digits.slice(0, limit);
+
+  // Try E.164-based national format (correct for all countries, no trunk prefix)
+  if (window.intlTelInputUtils && dialCode) {
+    try {
+      const e164 = '+' + dialCode + safeDigits;
+      const nat = intlTelInputUtils.formatNumber(e164, null, intlTelInputUtils.numberFormat.NATIONAL);
+      // Sanity: formatted digits must match what user typed (no digit mutation)
+      if (nat && nat.replace(/\D/g, '') === safeDigits) {
+        return nat;
+      }
+    } catch (e) {}
+  }
+
+  // Progressive fallback (used before utils.js loads or for unknown countries)
+  if (countryCode === 'in') {
+    return safeDigits.length > 5
+      ? safeDigits.slice(0, 5) + ' ' + safeDigits.slice(5)
+      : safeDigits;
+  }
+  if (countryCode === 'us' || countryCode === 'ca') {
+    if (safeDigits.length <= 3) return '(' + safeDigits;
+    if (safeDigits.length <= 6) return '(' + safeDigits.slice(0, 3) + ') ' + safeDigits.slice(3);
+    return '(' + safeDigits.slice(0, 3) + ') ' + safeDigits.slice(3, 6) + '-' + safeDigits.slice(6);
+  }
+  if (countryCode === 'gb') {
+    return safeDigits.length > 5
+      ? safeDigits.slice(0, 5) + ' ' + safeDigits.slice(5)
+      : safeDigits;
+  }
+  return safeDigits;
+}
+
+// Initialize intl-tel-input for attendee rows
+window.portalItiInstances = {};
+
+function initPhoneInputs() {
+  window.portalItiInstances = {};
+  const phoneInputs = document.querySelectorAll('.horizontal-attendee-row input[type="tel"]');
+  phoneInputs.forEach(inputEl => {
+    const ticketId = inputEl.dataset.ticketId;
+    const idx = parseInt(inputEl.dataset.index);
+    const key = `${ticketId}-${idx}`;
+
+    const iti = window.intlTelInput(inputEl, {
+      initialCountry: "in",
+      preferredCountries: ["in", "us", "gb"],
+      separateDialCode: true,
+      dropdownContainer: document.body,
+      utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/utils.js"
+    });
+
+    window.portalItiInstances[key] = iti;
+
+    const updateCart = () => {
+      const fullNumber = iti.getNumber();
+      updateAttendeeValue(ticketId, idx, 'phone', fullNumber);
+    };
+
+    inputEl.addEventListener('change', updateCart);
+
+    let lastVal = inputEl.value;
+    const formatPhone = () => {
+      try {
+        const currentVal = inputEl.value;
+        const countryData = iti.getSelectedCountryData();
+        if (countryData && countryData.iso2 && countryData.dialCode) {
+          const cleanVal = currentVal.replace(/\D/g, '');
+
+          // formatPhoneDisplay enforces per-country digit limits internally
+          const formatted = formatPhoneDisplay(cleanVal, countryData.dialCode, countryData.iso2);
+          if (formatted !== currentVal) {
+            const selectionEnd = inputEl.selectionEnd;
+            const lengthDiff = formatted.length - currentVal.length;
+            // If formatter rejected extra digits (returned shorter), revert
+            if (cleanVal.length > formatted.replace(/\D/g, '').length) {
+              inputEl.value = lastVal;
+              return;
+            }
+            inputEl.value = formatted;
+            lastVal = formatted;
+            const newPos = Math.max(0, selectionEnd + lengthDiff);
+            inputEl.setSelectionRange(newPos, newPos);
+          } else {
+            lastVal = currentVal;
+          }
+        }
+      } catch (err) {
+        console.error("Error formatting phone:", err);
+      }
+    };
+
+    inputEl.addEventListener('input', () => {
+      const errEl = document.getElementById(`err-att-${ticketId}-${idx}-phone`);
+      if (errEl) errEl.textContent = '';
+      
+      const currentVal = inputEl.value;
+      if (currentVal.length > lastVal.length) {
+        formatPhone();
+      } else {
+        lastVal = currentVal;
+      }
+      updateCart();
+    });
+
+    inputEl.addEventListener('countrychange', formatPhone);
+
+    if (inputEl.value) {
+      if (window.intlTelInputUtils) {
+        formatPhone();
+      } else {
+        const interval = setInterval(() => {
+          if (window.intlTelInputUtils) {
+            formatPhone();
+            clearInterval(interval);
+          }
+        }, 100);
+      }
+    }
+  });
+}
+</script>
+{% endblock %}

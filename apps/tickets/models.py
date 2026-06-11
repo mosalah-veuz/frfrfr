@@ -36,7 +36,7 @@ class Ticket(models.Model):
         if self.ticket_type == 'paid' and (self.price is None or self.price <= 0):
             raise ValidationError({'price': 'Paid tickets must have a price greater than 0.'})
         # Quantity required for limited tickets
-        if self.quantity_type == 'limited' and not self.total_quantity:
+        if self.quantity_type == 'limited' and self.total_quantity is None:
             raise ValidationError({'total_quantity': 'Enter a quantity for limited tickets.'})
         # Unlimited tickets should not have a quantity
         if self.quantity_type == 'unlimited':
@@ -48,11 +48,32 @@ class Ticket(models.Model):
 
     @property
     def sold_count(self):
-        from django.db.models import Sum
+        if hasattr(self, 'annotated_sold_count'):
+            return self.annotated_sold_count
         from apps.registrations.models import RegistrationItem
+        from django.db.models import Q
+        from django.utils import timezone
+
+        now = timezone.now()
+        active_payment_cutoff = now - timezone.timedelta(minutes=15)
+        recent_pending_cutoff = now - timezone.timedelta(minutes=2)
+
         result = RegistrationItem.objects.filter(
-            ticket=self,
-            registration__status__in=['processing', 'completed']
+            ticket=self
+        ).filter(
+            Q(registration__status='completed') |
+            # Case 1: Pending registration with a transaction created within the payment window (15 mins)
+            Q(
+                registration__status='pending',
+                registration__transaction__status='created',
+                registration__created_at__gte=active_payment_cutoff
+            ) |
+            # Case 2: Pending registration created in the last 2 minutes, which is in the middle of creating its order/transaction
+            Q(
+                registration__status='pending',
+                registration__transaction__isnull=True,
+                registration__created_at__gte=recent_pending_cutoff
+            )
         ).count()
         return result
 

@@ -4,7 +4,7 @@ Views stay thin; all rules live here.
 """
 import logging
 from django.db import transaction as db_transaction, IntegrityError
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.tickets.models import Ticket
@@ -43,46 +43,115 @@ class TicketNotAvailableError(Exception):
 def _check_email_duplicates(items: list[dict]) -> dict:
     """
     Event-wide duplicate email check.
-    For each ticket where duplicate_email=False, check if ANY attendee email
-    already exists in ANY completed registration across the entire event.
+    For each ticket:
+      - If duplicate_email=False: block attendee emails already registered in ANY completed registration.
+      - If duplicate_email=True: block attendee emails registered in a completed registration for a ticket type with duplicate_email=False.
+    Also handles cross-ticket duplicate checks within the current transaction.
     Returns conflicts dict: { ticket_name: [blocked_emails] }
     """
+    candidate_emails = set()
+    for item in items:
+        for att in item['attendees']:
+            candidate_emails.add(att['email'].lower())
+
+    # Bulk query completed registrations
+    db_items = RegistrationItem.objects.filter(
+        attendee_email__in=candidate_emails,
+        registration__status='completed'
+    ).select_related('ticket')
+
+    emails_in_any_completed = set()
+    emails_in_restricted_completed = set()
+
+    for db_item in db_items:
+        email = db_item.attendee_email.lower()
+        emails_in_any_completed.add(email)
+        if not db_item.ticket.duplicate_email:
+            emails_in_restricted_completed.add(email)
+
+    # Analyze current request for in-request duplicates
+    from collections import defaultdict
+    email_request_info = defaultdict(lambda: {'count': 0, 'has_restricted': False})
+    for item in items:
+        is_restricted = not item['ticket'].duplicate_email
+        for att in item['attendees']:
+            email = att['email'].lower()
+            email_request_info[email]['count'] += 1
+            if is_restricted:
+                email_request_info[email]['has_restricted'] = True
+
     conflicts = {}
     for item in items:
         ticket: Ticket = item['ticket']
-        if ticket.duplicate_email:
-            continue  # this ticket allows email reuse
+        blocked = []
+        for att in item['attendees']:
+            email = att['email'].lower()
 
-        attendee_emails = [a['email'].lower() for a in item['attendees']]
+            # 1. Check database completed registrations
+            if not ticket.duplicate_email:
+                if email in emails_in_any_completed:
+                    blocked.append(email)
+                    continue
+            else:
+                if email in emails_in_restricted_completed:
+                    blocked.append(email)
+                    continue
 
-        # Check against ALL completed registration items (event-wide)
-        blocked = list(
-            RegistrationItem.objects.filter(
-                attendee_email__in=attendee_emails,
-                registration__status='completed'
-            ).values_list('attendee_email', flat=True).distinct()
-        )
+            # 2. Check current request items (in-request duplicates)
+            if not ticket.duplicate_email:
+                if email_request_info[email]['count'] > 1:
+                    blocked.append(email)
+                    continue
+            else:
+                if email_request_info[email]['has_restricted']:
+                    blocked.append(email)
+                    continue
 
         if blocked:
-            conflicts[ticket.name] = blocked
+            conflicts[ticket.name] = list(set(blocked))
 
     return conflicts
+
 
 
 def _check_quota(items: list[dict]) -> None:
     """
     Row-locked quota check. Must be called inside an atomic block.
+    Extracts and sorts all ticket IDs in ascending order before acquiring locks.
+    This deterministic lock order prevents database deadlocks.
     Raises TicketSoldOutError on first violation.
     """
+    ticket_ids = sorted(list(set(item['ticket'].id for item in items)))
+    locked_tickets = {
+        t.id: t for t in Ticket.objects.select_for_update().filter(id__in=ticket_ids).order_by('id')
+    }
+
     for item in items:
-        ticket: Ticket = Ticket.objects.select_for_update().get(id=item['ticket'].id)
+        ticket = locked_tickets[item['ticket'].id]
 
         if ticket.quantity_type == 'unlimited':
             continue
 
+        now = timezone.now()
+        active_payment_cutoff = now - timezone.timedelta(minutes=15)
+        recent_pending_cutoff = now - timezone.timedelta(minutes=2)
+
         sold = RegistrationItem.objects.filter(
             ticket=ticket,
-            registration__status__in=['processing', 'completed']
+        ).filter(
+            Q(registration__status='completed') |
+            # Case 1: Pending registration with a transaction created within the payment window (15 mins)
+            Q(
+                registration__status='pending',
+                registration__transaction__status='created',
+                registration__created_at__gte=active_payment_cutoff
+            ) |
+            # Case 2: Pending registration created in the last 2 minutes, which is in the middle of creating its order/transaction
+            Q(
+                registration__status='pending',
+                registration__transaction__isnull=True,
+                registration__created_at__gte=recent_pending_cutoff
+            )
         ).count()
 
         requested = len(item['attendees'])
@@ -118,11 +187,11 @@ def create_registration(contact: dict, items: list[dict], user=None) -> Registra
     _check_quota(items)
 
     # 4. Guard against double-submission:
-    #    same contact email + pending status within last 5 minutes
+    #    same contact email + pending status within last 15 seconds (prevents double-clicks)
     recent = Registration.objects.filter(
         contact_email=contact['email'].lower(),
         status='pending',
-        created_at__gte=timezone.now() - timezone.timedelta(minutes=5)
+        created_at__gte=timezone.now() - timezone.timedelta(seconds=15)
     ).first()
     if recent:
         logger.warning(
@@ -159,3 +228,45 @@ def create_registration(contact: dict, items: list[dict], user=None) -> Registra
     )
 
     return registration
+
+
+def expire_stale_pending_registrations_service() -> str:
+    """
+    Business service to expire pending registrations older than 15 minutes.
+    Excludes registrations that have a pending/processing Transaction to prevent race conditions with in-flight payments.
+    Triggers save signals and registers audit activities per registration.
+    """
+    from django.utils import timezone
+    from apps.activity.utils import log_action
+
+    cutoff = timezone.now() - timezone.timedelta(minutes=15)
+
+    stale_regs = Registration.objects.filter(
+        status='pending',
+        created_at__lt=cutoff
+    ).exclude(
+        # Only protect registrations with an active Razorpay order still in play.
+        # 'created' = order raised but user hasn't paid yet (could still complete).
+        # 'paid'    = already captured — shouldn't be pending anyway, but guard it.
+        # 'failed' / 'refunded' transactions should NOT block cleanup.
+        transaction__status__in=['created', 'paid']
+    )
+
+    expired_ids = []
+    for reg in stale_regs:
+        reg.status = 'cancelled'
+        reg.save(update_fields=['status'])
+        expired_ids.append(reg.id)
+
+        # Log audit action
+        log_action(
+            action='registration_expired',
+            target=f"REG-{reg.id:04d}",
+            metadata={'reason': 'Auto-cancelled due to inactivity (15-minute pending expiration)'}
+        )
+
+    if not expired_ids:
+        return "No stale registrations found."
+
+    return f"Expired {len(expired_ids)} stale registration(s): {expired_ids}"
+

@@ -1,0 +1,134 @@
+{% extends "admin_base.html" %}
+{% block title %}Payments — EventHub{% endblock %}
+{% block admin_content %}
+<div class="page-header">
+  <div>
+    <h1>Payments</h1>
+    <span class="page-subtitle">{{ transactions|length }} total</span>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <p class="filter-bar-title">Filter payments</p>
+  <form method="get" class="filter-form">
+    <div class="filter-field">
+      <label for="{{ filter.form.status.id_for_label }}">Status</label>
+      {{ filter.form.status }}
+    </div>
+    <div class="filter-field">
+      <label for="{{ filter.form.search.id_for_label }}">Search</label>
+      {{ filter.form.search }}
+    </div>
+    <div class="filter-field">
+      <label for="{{ filter.form.date_from.id_for_label }}">From date</label>
+      {{ filter.form.date_from }}
+    </div>
+    <div class="filter-field">
+      <label for="{{ filter.form.date_to.id_for_label }}">To date</label>
+      {{ filter.form.date_to }}
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-sm btn-secondary">Apply filters</button>
+      <a href="{% url 'payment_list' %}" class="btn btn-sm btn-ghost">Clear</a>
+    </div>
+  </form>
+</div>
+
+<div class="section-block">
+  <h2 class="section-title">All Transactions</h2>
+  {% if transactions %}
+    <div class="table-wrap">
+      <div class="pay-list">
+        <div class="pay-list-header pay-list-row">
+          <div class="pay-col-order">Order ID</div>
+          <div class="pay-col-payment">Payment ID</div>
+          <div class="pay-col-registrant">Billing Contact</div>
+          <div class="pay-col-amount">Amount</div>
+          <div class="pay-col-method">Method</div>
+          <div class="pay-col-status">Status</div>
+          <div class="pay-col-date">Date</div>
+        </div>
+
+        {% for txn in transactions %}
+        <div class="pay-item">
+          <div class="pay-list-row">
+            <!-- Order ID -->
+            <div class="pay-col-order" title="{{ txn.razorpay_order_id }}">
+              {{ txn.razorpay_order_id }}
+            </div>
+
+            <!-- Payment ID -->
+            <div class="pay-col-payment" title="{{ txn.razorpay_payment_id|default:'—' }}">
+              {{ txn.razorpay_payment_id|default:'—' }}
+            </div>
+
+            <!-- Billing Contact Details -->
+            <div class="pay-col-registrant">
+              <div class="contact-cell contact-cell--compact">
+                <span class="contact-name">
+                  {% if txn.registration %}
+                    {{ txn.registration.contact_name }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </span>
+                {% if txn.registration %}
+                  <span class="contact-detail">{{ txn.registration.contact_email }}</span>
+                  <span class="contact-detail" style="font-size: 11px; color: var(--text3);">{{ txn.registration.contact_phone }}</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Amount -->
+            <div class="pay-col-amount">
+              ₹{{ txn.amount }}
+              {% if txn.razorpay_fee %}
+                <span class="contact-detail" style="font-size: 11px; color: var(--text3);">Fee: ₹{{ txn.razorpay_fee }}</span>
+              {% endif %}
+            </div>
+
+            <!-- Payment Method -->
+            <div class="pay-col-method">
+              {% if txn.payment_method %}
+                <span class="method-badge method-{{ txn.payment_method }}">
+                  {% if txn.payment_method == 'card' %}
+                    {% if txn.card_network %}<strong>{{ txn.card_network }}</strong>{% endif %}
+                    {% if txn.card_type %} · {{ txn.card_type|title }}{% endif %}
+                    {% if txn.card_last4 %} ····{{ txn.card_last4 }}{% endif %}
+                    {% if txn.card_issuer %}<br><small>{{ txn.card_issuer }}</small>{% endif %}
+                  {% elif txn.payment_method == 'upi' %}
+                    UPI{% if txn.vpa %}<br><small>{{ txn.vpa }}</small>{% endif %}
+                  {% elif txn.payment_method == 'netbanking' %}
+                    Net Banking{% if txn.bank %}<br><small>{{ txn.bank }}</small>{% endif %}
+                  {% elif txn.payment_method == 'wallet' %}
+                    {{ txn.wallet|default:'Wallet' }}
+                  {% elif txn.payment_method == 'emi' %}
+                    EMI{% if txn.bank %} · {{ txn.bank }}{% endif %}
+                  {% else %}
+                    {{ txn.payment_method|title }}
+                  {% endif %}
+                </span>
+              {% else %}
+                <span style="color: var(--text3);">—</span>
+              {% endif %}
+            </div>
+
+            <!-- Status -->
+            <div class="pay-col-status">
+              <span class="badge badge-status-{{ txn.status }}">{{ txn.status|title }}</span>
+            </div>
+
+            <!-- Date -->
+            <div class="pay-col-date">
+              {{ txn.created_at|date:"d M Y H:i" }}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% else %}
+    <div class="empty-state"><p>No transactions found.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

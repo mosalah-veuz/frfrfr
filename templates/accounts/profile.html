@@ -18,14 +18,12 @@
           </div>
           <div class="user-dropdown" id="userDropdown">
             <a href="{% url 'profile' %}">Profile</a>
-            {% if request.user.is_staff %}
-              <a href="{% url 'admin_dashboard' %}">Admin Dashboard</a>
-            {% endif %}
             <a href="{% url 'admin_logout' %}">Sign Out</a>
           </div>
         </div>
       {% else %}
-        <a href="{% url 'admin_login' %}" class="btn btn-secondary btn-login-header">Sign In</a>
+        <a href="{% url 'login' %}{% if request.path %}?next={{ request.path }}{% endif %}" class="btn btn-ghost btn-login-header">Sign In</a>
+        <a href="{% url 'signup' %}{% if request.path %}?next={{ request.path }}{% endif %}" class="btn btn-secondary btn-login-header">Sign Up</a>
       {% endif %}
     </div>
   </header>

@@ -4,4 +4,7 @@ from django.urls import reverse
 
 def axes_lockout_handler(request, credentials, *args, **kwargs):
     """Custom lockout response — return to login with error."""
-    return HttpResponseRedirect(reverse('admin_login') + '?locked=1')
+    if request and '/panel/' in request.path:
+        return HttpResponseRedirect(reverse('admin_login') + '?locked=1')
+    return HttpResponseRedirect(reverse('login') + '?locked=1')
+

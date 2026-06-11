@@ -18,14 +18,12 @@
           </div>
           <div class="user-dropdown" id="userDropdown">
             <a href="{% url 'profile' %}">Profile</a>
-            {% if request.user.is_staff %}
-              <a href="{% url 'admin_dashboard' %}">Admin Dashboard</a>
-            {% endif %}
-              <a href="{% url 'admin_logout' %}">Sign Out</a>
+            <a href="{% url 'admin_logout' %}">Sign Out</a>
           </div>
         </div>
       {% else %}
-        <a href="{% url 'admin_login' %}" class="btn btn-secondary btn-login-header">Sign In</a>
+        <a href="{% url 'login' %}{% if request.path %}?next={{ request.path }}{% endif %}" class="btn btn-ghost btn-login-header">Sign In</a>
+        <a href="{% url 'signup' %}{% if request.path %}?next={{ request.path }}{% endif %}" class="btn btn-secondary btn-login-header">Sign Up</a>
       {% endif %}
     </div>
   </header>
@@ -199,6 +197,24 @@ function renderCheckoutSummary() {
     <span>${total === 0 ? 'Free' : '₹' + total.toFixed(2)}</span>
   `;
   listContainer.innerHTML = listHtml;
+
+  const isFree = (total === 0);
+  const billingPanel = document.querySelector(".checkout-billing-panel");
+  if (billingPanel) {
+    if (isFree) {
+      billingPanel.style.display = "none";
+      const summaryPanel = document.querySelector(".checkout-summary-panel");
+      if (summaryPanel) {
+        summaryPanel.style.gridColumn = "2";
+      }
+    } else {
+      billingPanel.style.display = "";
+      const summaryPanel = document.querySelector(".checkout-summary-panel");
+      if (summaryPanel) {
+        summaryPanel.style.gridColumn = "";
+      }
+    }
+  }
 }
 
 function escapeHtml(str) {
@@ -227,27 +243,54 @@ function showGlobalError(msg) {
 async function submitRegistration() {
   clearErrors();
 
-  const first_name = document.getElementById('contactFirstName').value.trim();
-  const last_name = document.getElementById('contactLastName').value.trim();
-  const email = document.getElementById('contactEmail').value.trim();
-  const phone = checkoutIti ? checkoutIti.getNumber().trim() : document.getElementById('contactPhone').value.trim();
-  const isPhoneValid = checkoutIti ? checkoutIti.isValidNumber() : true;
+  let total = 0;
+  Object.values(cart).forEach(({ ticket, attendees }) => {
+    total += ticket.price * attendees.length;
+  });
+  const isFree = (total === 0);
 
-  if (!first_name || !email || !phone) {
-    if (!first_name) document.getElementById('err-contact-first_name').textContent = 'First name is required.';
-    if (!email) document.getElementById('err-contact-email').textContent = 'Email is required.';
-    if (!phone) document.getElementById('err-contact-phone').textContent = 'Phone is required.';
-    showGlobalError('Please fill in all required contact details.');
-    return;
+  let contact = {};
+  if (isFree) {
+    const firstTicketGroup = Object.values(cart)[0];
+    if (firstTicketGroup && firstTicketGroup.attendees && firstTicketGroup.attendees.length > 0) {
+      const firstAtt = firstTicketGroup.attendees[0];
+      contact = {
+        first_name: firstAtt.first_name || 'Guest',
+        last_name: firstAtt.last_name || '',
+        email: firstAtt.email || 'guest@eventhub.com',
+        phone: firstAtt.phone || '+910000000000'
+      };
+    } else {
+      contact = {
+        first_name: 'Guest',
+        last_name: '',
+        email: 'guest@eventhub.com',
+        phone: '+910000000000'
+      };
+    }
+  } else {
+    const first_name = document.getElementById('contactFirstName').value.trim();
+    const last_name = document.getElementById('contactLastName').value.trim();
+    const email = document.getElementById('contactEmail').value.trim();
+    const phone = checkoutIti ? checkoutIti.getNumber().trim() : document.getElementById('contactPhone').value.trim();
+    const isPhoneValid = checkoutIti ? checkoutIti.isValidNumber() : true;
+
+    if (!first_name || !email || !phone) {
+      if (!first_name) document.getElementById('err-contact-first_name').textContent = 'First name is required.';
+      if (!email) document.getElementById('err-contact-email').textContent = 'Email is required.';
+      if (!phone) document.getElementById('err-contact-phone').textContent = 'Phone is required.';
+      showGlobalError('Please fill in all required contact details.');
+      return;
+    }
+
+    if (!isPhoneValid) {
+      document.getElementById('err-contact-phone').textContent = 'Enter a valid phone number.';
+      showGlobalError('Please correct the validation errors on the form.');
+      return;
+    }
+
+    contact = { first_name, last_name, email, phone };
   }
-
-  if (!isPhoneValid) {
-    document.getElementById('err-contact-phone').textContent = 'Enter a valid phone number.';
-    showGlobalError('Please correct the validation errors on the form.');
-    return;
-  }
-
-  const contact = { first_name, last_name, email, phone };
 
   const items = Object.entries(cart).map(([ticketId, { ticket, attendees }]) => ({
     ticket_id: parseInt(ticketId),

@@ -16,8 +16,8 @@
       {{ filter.form.status }}
     </div>
     <div class="filter-field">
-      <label for="{{ filter.form.email.id_for_label }}">Contact email</label>
-      {{ filter.form.email }}
+      <label for="{{ filter.form.search.id_for_label }}">Search</label>
+      {{ filter.form.search }}
     </div>
     <div class="filter-field">
       <label for="{{ filter.form.ticket.id_for_label }}">Ticket type</label>
@@ -56,17 +56,4 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script>
-document.querySelectorAll('.reg-toggle-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const detailRow = document.getElementById(btn.dataset.target);
-    const isOpen = !detailRow.hidden;
-    detailRow.hidden = isOpen;
-    btn.setAttribute('aria-expanded', String(!isOpen));
-    btn.querySelector('.toggle-label-show').hidden = !isOpen;
-    btn.querySelector('.toggle-label-hide').hidden = isOpen;
-    btn.closest('.reg-row').classList.toggle('reg-row--expanded', !isOpen);
-  });
-});
-</script>
 {% endblock %}

@@ -11,30 +11,12 @@ from .models import Ticket
 from .forms import TicketForm
 
 
-class TicketFilter(django_filters.FilterSet):
-    ticket_type   = django_filters.ChoiceFilter(
-        choices=Ticket.TICKET_TYPE_CHOICES,
-        empty_label='All ticket types',
-        label='Ticket type',
-    )
-    quantity_type = django_filters.ChoiceFilter(
-        choices=Ticket.QUANTITY_TYPE_CHOICES,
-        empty_label='All quantity types',
-        label='Quantity type',
-    )
-    is_active     = django_filters.ChoiceFilter(
-        choices=[(True, 'Active'), (False, 'Inactive')],
-        empty_label='All statuses',
-        label='Active status',
-    )
-
-    class Meta:
-        model  = Ticket
-        fields = ['ticket_type', 'quantity_type', 'is_active']
+from .filters import TicketFilter
+from .selectors import get_all_tickets_with_counts_selector
 
 
 def _render_ticket_list(request, form_by_ticket_id=None, edit_ticket_id=None):
-    qs = Ticket.objects.all()
+    qs = get_all_tickets_with_counts_selector()
     f = TicketFilter(request.GET, queryset=qs)
     tickets = list(f.qs)
     form_by_ticket_id = form_by_ticket_id or {}
@@ -94,6 +76,18 @@ def ticket_update(request, pk):
         form = TicketForm(request.POST, instance=ticket)
         if form.is_valid():
             ticket = form.save()
+            log_action(
+                'ticket_update',
+                actor=request.user,
+                target=f"Ticket #{ticket.id} — {ticket.name}",
+                metadata={
+                    'ticket_type':   ticket.ticket_type,
+                    'price':         str(ticket.price),
+                    'quantity_type': ticket.quantity_type,
+                    'total_quantity': ticket.total_quantity,
+                },
+                request=request
+            )
             messages.success(request, f"Ticket '{ticket.name}' updated successfully.")
             return redirect('ticket_list')
         return _render_ticket_list(

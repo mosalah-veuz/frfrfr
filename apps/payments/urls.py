@@ -4,4 +4,5 @@ from . import views
 urlpatterns = [
     path('callback/',  views.payment_callback,  name='payment_callback'),
     path('webhook/',   views.razorpay_webhook,   name='razorpay_webhook'),
+    path('panel/payments/', views.payment_list, name='payment_list'),
 ]

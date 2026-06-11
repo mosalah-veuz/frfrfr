@@ -12,6 +12,68 @@
 </head>
 <body>
   {% block body %}{% endblock %}
+
+  <script>
+  function showCustomAlert(message, title = "Notification") {
+    const overlay = document.createElement('div');
+    overlay.className = 'custom-alert-overlay';
+    
+    const box = document.createElement('div');
+    box.className = 'custom-alert-box';
+    
+    const icon = document.createElement('div');
+    icon.className = 'custom-alert-icon';
+    icon.innerHTML = '◈';
+    
+    const titleEl = document.createElement('h3');
+    titleEl.className = 'custom-alert-title';
+    titleEl.innerText = title;
+    
+    const msgEl = document.createElement('p');
+    msgEl.className = 'custom-alert-message';
+    msgEl.innerText = message;
+    
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-primary btn-full custom-alert-btn';
+    btn.innerText = 'OK';
+    
+    const dismiss = () => {
+      overlay.classList.add('custom-alert-overlay--closing');
+      setTimeout(() => {
+        if (overlay.parentNode) {
+          overlay.parentNode.removeChild(overlay);
+        }
+      }, 180);
+    };
+    
+    btn.onclick = dismiss;
+    overlay.onclick = (e) => {
+      if (e.target === overlay) dismiss();
+    };
+    
+    box.appendChild(icon);
+    box.appendChild(titleEl);
+    box.appendChild(msgEl);
+    box.appendChild(btn);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    
+    btn.focus();
+    
+    const handleKey = (e) => {
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault();
+        window.removeEventListener('keydown', handleKey);
+        dismiss();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+  }
+  
+  // Globally override native alert
+  window.alert = showCustomAlert;
+  </script>
+
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -4,16 +4,17 @@ from django.conf import settings
 
 class ActivityLog(models.Model):
     ACTION_CHOICES = [
-        ('login',              'Admin Login'),
-        ('logout',             'Admin Logout'),
-        ('login_failed',       'Login Failed'),
-        ('ticket_create',      'Ticket Created'),
-        ('ticket_delete',      'Ticket Deleted'),
-        ('ticket_view',        'Ticket Viewed'),
-        ('registration_view',  'Registration Viewed'),
-        ('payment_created',    'Payment Order Created'),
-        ('payment_verified',   'Payment Verified'),
-        ('payment_failed',     'Payment Failed'),
+        ('login',                'Admin Login'),
+        ('logout',               'Admin Logout'),
+        ('login_failed',         'Login Failed'),
+        ('user_registered',      'User Registered'),
+        ('ticket_create',        'Ticket Created'),
+        ('ticket_update',        'Ticket Updated'),
+        ('ticket_delete',        'Ticket Deleted'),
+        ('payment_created',      'Payment Order Created'),
+        ('payment_verified',     'Payment Verified'),
+        ('payment_failed',       'Payment Failed'),
+        ('registration_expired', 'Registration Expired'),
     ]
 
     actor     = models.ForeignKey(

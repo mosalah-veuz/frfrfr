@@ -16,6 +16,9 @@
       <a href="{% url 'registration_list' %}" class="nav-item {% if 'registration' in request.resolver_match.url_name %}active{% endif %}">
         <span class="nav-icon">◈</span> Registrations
       </a>
+      <a href="{% url 'payment_list' %}" class="nav-item {% if 'payment' in request.resolver_match.url_name %}active{% endif %}">
+        <span class="nav-icon">💳</span> Payments
+      </a>
       <a href="{% url 'activity_log_list' %}" class="nav-item {% if 'activity' in request.resolver_match.url_name %}active{% endif %}">
         <span class="nav-icon">◎</span> Activity Logs
       </a>

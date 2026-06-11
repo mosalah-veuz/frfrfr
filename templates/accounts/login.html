@@ -1,44 +1,64 @@
 {% extends "base.html" %}
 {% block title %}Sign In — EventHub{% endblock %}
 {% block body %}
-<div class="login-page">
-  <div class="login-card">
-    <div class="login-header">
-      <span class="brand-icon lg">◈</span>
+<div class="portal-page">
+  <header class="portal-header">
+    <div class="portal-header-brand" onclick="window.location.href='{% url 'portal' %}'" style="cursor: pointer;">
+      <span class="brand-icon">◈</span>
       <h1>EventHub</h1>
-      <p>Sign in to your account</p>
     </div>
+    <div class="portal-header-right" style="display: flex; align-items: center; gap: 12px;">
+      <a href="{% url 'portal' %}" class="btn btn-ghost btn-login-header">Back to Tickets</a>
+      {% if not is_admin_login %}
+        <a href="{% url 'signup' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}" class="btn btn-secondary btn-login-header">Sign Up</a>
+      {% endif %}
+    </div>
+  </header>
 
-    {% if locked %}
-      <div class="alert alert-error">
-        Account temporarily locked after too many failed attempts. Try again later.
+  <div class="login-page" style="min-height: calc(100vh - 73px);">
+    <div class="login-card">
+      <div class="login-header">
+        <span class="brand-icon lg">◈</span>
+        <h1>{{ page_title|default:"EventHub" }}</h1>
+        <p>{{ page_subtitle|default:"Sign in to your account" }}</p>
       </div>
-    {% endif %}
 
-    {% if messages %}
-      {% for message in messages %}
-        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
-      {% endfor %}
-    {% endif %}
+      {% if locked %}
+        <div class="alert alert-error">
+          Account temporarily locked after too many failed attempts. Try again later.
+        </div>
+      {% endif %}
 
-    <form method="post" id="loginForm" novalidate>
-      {% csrf_token %}
-      <div class="field">
-        <label for="id_username">Username</label>
-        {{ form.username }}
-        {% if form.username.errors %}
-          <span class="field-error">{{ form.username.errors.0 }}</span>
-        {% endif %}
-      </div>
-      <div class="field">
-        <label for="id_password">Password</label>
-        {{ form.password }}
-        {% if form.password.errors %}
-          <span class="field-error">{{ form.password.errors.0 }}</span>
-        {% endif %}
-      </div>
-      <button type="submit" class="btn btn-primary btn-full">Sign In</button>
-    </form>
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" id="loginForm" novalidate>
+        {% csrf_token %}
+        <div class="field">
+          <label for="id_username">Username</label>
+          {{ form.username }}
+          {% if form.username.errors %}
+            <span class="field-error">{{ form.username.errors.0 }}</span>
+          {% endif %}
+        </div>
+        <div class="field">
+          <label for="id_password">Password</label>
+          {{ form.password }}
+          {% if form.password.errors %}
+            <span class="field-error">{{ form.password.errors.0 }}</span>
+          {% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+      </form>
+      {% if not is_admin_login %}
+        <div style="margin-top: 20px; text-align: center; font-size: 13.5px; color: var(--text2);">
+          Don't have an account? <a href="{% url 'signup' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}" style="font-weight: 600; color: var(--accent);">Sign Up</a>
+        </div>
+      {% endif %}
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -39,7 +39,6 @@
         <th>Name</th>
         <th>Type</th>
         <th>Price</th>
-        <th>Quantity</th>
         <th>Sold</th>
         <th>Dedup Email</th>
         <th>Status</th>
@@ -53,17 +52,8 @@
         <td><span class="badge badge-{{ ticket.ticket_type }}">{{ ticket.get_ticket_type_display }}</span></td>
         <td>{% if ticket.ticket_type == 'paid' %}₹{{ ticket.price }}{% else %}Free{% endif %}</td>
         <td>
-          {% if ticket.quantity_type == 'limited' %}
-            {{ ticket.total_quantity }}
-          {% else %}
-            <span class="text-muted">Unlimited</span>
-          {% endif %}
-        </td>
-        <td>
           {{ ticket.sold_count }}
-          {% if ticket.quantity_type == 'limited' %}
-            <span class="text-muted">/ {{ ticket.total_quantity }}</span>
-          {% endif %}
+          <span class="text-muted">/ {% if ticket.quantity_type == 'limited' %}{{ ticket.total_quantity }}{% else %}Unlimited{% endif %}</span>
         </td>
         <td>
           {% if ticket.duplicate_email %}
@@ -144,9 +134,15 @@
           </div>
 
           <div class="field ticket-quantity-field">
-            <label for="{{ ticket.edit_form.total_quantity.id_for_label }}">Total Quantity</label>
-            {{ ticket.edit_form.total_quantity }}
-            {% if ticket.edit_form.total_quantity.errors %}<span class="field-error">{{ ticket.edit_form.total_quantity.errors.0 }}</span>{% endif %}
+            {% if ticket.sold_count %}
+              <div style="margin-bottom: 8px; font-size: 13px; color: var(--text2);">
+                <strong>Tickets Sold:</strong> {{ ticket.sold_count }}
+              </div>
+            {% endif %}
+            <label for="{{ ticket.edit_form.available_quantity.id_for_label }}">Tickets Available for Purchase <span class="required">*</span></label>
+            {{ ticket.edit_form.available_quantity }}
+            {% if ticket.edit_form.available_quantity.errors %}<span class="field-error">{{ ticket.edit_form.available_quantity.errors.0 }}</span>{% endif %}
+            <small class="field-hint" style="display: block; margin-top: 4px;">Number of active tickets available for purchase.</small>
           </div>
 
           <div class="field field-full">

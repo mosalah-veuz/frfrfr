@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}Sign Up — EventHub{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/css/intlTelInput.css">
+<style>
+  /* Extra adjustments for signup layout */
+  .login-card--signup {
+    max-width: 580px;
+    padding: 36px;
+  }
+  .signup-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 20px;
+  }
+  .signup-field-full {
+    grid-column: span 2;
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="portal-page">
+  <header class="portal-header">
+    <div class="portal-header-brand" onclick="window.location.href='{% url 'portal' %}'" style="cursor: pointer;">
+      <span class="brand-icon">◈</span>
+      <h1>EventHub</h1>
+    </div>
+    <div class="portal-header-right" style="display: flex; align-items: center; gap: 12px;">
+      <a href="{% url 'portal' %}" class="btn btn-ghost btn-login-header">Back to Tickets</a>
+      <a href="{% url 'login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}" class="btn btn-secondary btn-login-header">Sign In</a>
+    </div>
+  </header>
+
+  <div class="login-page" style="min-height: calc(100vh - 73px);">
+    <div class="login-card login-card--signup">
+      <div class="login-header" style="margin-bottom: 24px;">
+        <span class="brand-icon lg">◈</span>
+        <h1>Create Account</h1>
+        <p>Sign up to start booking tickets</p>
+      </div>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" id="signupForm" novalidate>
+        {% csrf_token %}
+        
+        <div class="signup-grid">
+          <div class="field signup-field-full">
+            <label for="id_username">Username</label>
+            {{ form.username }}
+            {% if form.username.errors %}
+              <span class="field-error">{{ form.username.errors.0 }}</span>
+            {% endif %}
+          </div>
+
+          <div class="field">
+            <label for="id_first_name">First Name</label>
+            {{ form.first_name }}
+            {% if form.first_name.errors %}
+              <span class="field-error">{{ form.first_name.errors.0 }}</span>
+            {% endif %}
+          </div>
+
+          <div class="field">
+            <label for="id_last_name">Last Name</label>
+            {{ form.last_name }}
+            {% if form.last_name.errors %}
+              <span class="field-error">{{ form.last_name.errors.0 }}</span>
+            {% endif %}
+          </div>
+
+          <div class="field signup-field-full">
+            <label for="id_email">Email Address</label>
+            {{ form.email }}
+            {% if form.email.errors %}
+              <span class="field-error">{{ form.email.errors.0 }}</span>
+            {% endif %}
+          </div>
+
+          <div class="field signup-field-full">
+            <label for="id_phone">Phone Number</label>
+            {{ form.phone }}
+            {% if form.phone.errors %}
+              <span class="field-error">{{ form.phone.errors.0 }}</span>
+            {% endif %}
+          </div>
+
+          <div class="field">
+            <label for="id_password">Password</label>
+            {{ form.password }}
+            {% if form.password.errors %}
+              <span class="field-error">{{ form.password.errors.0 }}</span>
+            {% endif %}
+          </div>
+
+          <div class="field">
+            <label for="id_confirm_password">Confirm Password</label>
+            {{ form.confirm_password }}
+            {% if form.confirm_password.errors %}
+              <span class="field-error">{{ form.confirm_password.errors.0 }}</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full" style="margin-top: 20px;">Sign Up</button>
+      </form>
+
+      <div style="margin-top: 20px; text-align: center; font-size: 13.5px; color: var(--text2);">
+        Already have an account? <a href="{% url 'login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}" style="font-weight: 600; color: var(--accent);">Sign In</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/intlTelInput.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/utils.js"></script>
+<script>
+function formatProgressive(digits, countryCode) {
+  if (!digits) return "";
+  
+  if (countryCode === 'in') {
+    const cleanDigits = digits.slice(0, 10);
+    if (cleanDigits.length > 5) {
+      return cleanDigits.slice(0, 5) + " " + cleanDigits.slice(5);
+    }
+    return cleanDigits;
+  }
+  
+  if (countryCode === 'us') {
+    const cleanDigits = digits.slice(0, 10);
+    if (cleanDigits.length === 0) return "";
+    let res = "";
+    if (cleanDigits.length <= 3) {
+      res = "(" + cleanDigits;
+    } else if (cleanDigits.length <= 6) {
+      res = "(" + cleanDigits.slice(0, 3) + ") " + cleanDigits.slice(3);
+    } else {
+      res = "(" + cleanDigits.slice(0, 3) + ") " + cleanDigits.slice(3, 6) + "-" + cleanDigits.slice(6);
+    }
+    return res;
+  }
+  
+  if (countryCode === 'gb') {
+    const cleanDigits = digits.slice(0, 11);
+    if (cleanDigits.length > 5) {
+      return cleanDigits.slice(0, 5) + " " + cleanDigits.slice(5);
+    }
+    return cleanDigits;
+  }
+
+  const cleanDigits = digits.slice(0, 15);
+  if (window.intlTelInputUtils) {
+    try {
+      const formatted = intlTelInputUtils.formatNumber(cleanDigits, countryCode, intlTelInputUtils.numberFormat.NATIONAL);
+      if (formatted) return formatted;
+    } catch (e) {}
+  }
+  return cleanDigits;
+}
+
+let signupIti;
+
+document.addEventListener("DOMContentLoaded", () => {
+  const phoneInput = document.getElementById('id_phone');
+  if (phoneInput) {
+    signupIti = window.intlTelInput(phoneInput, {
+      initialCountry: "in",
+      preferredCountries: ["in", "us", "gb"],
+      separateDialCode: true,
+      dropdownContainer: document.body,
+      utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/js/utils.js"
+    });
+
+    let lastVal = phoneInput.value;
+    const formatPhone = () => {
+      try {
+        const currentVal = phoneInput.value;
+        const countryData = signupIti.getSelectedCountryData();
+        if (countryData && countryData.iso2) {
+          const cleanVal = currentVal.replace(/\D/g, '');
+          
+          let maxLen = 15;
+          if (countryData.iso2 === 'in' || countryData.iso2 === 'us') maxLen = 10;
+          else if (countryData.iso2 === 'gb') maxLen = 11;
+          
+          if (cleanVal.length > maxLen) {
+            phoneInput.value = lastVal;
+            return;
+          }
+
+          const formatted = formatProgressive(cleanVal, countryData.iso2);
+          if (formatted !== currentVal) {
+            const selectionEnd = phoneInput.selectionEnd;
+            const lengthDiff = formatted.length - currentVal.length;
+            phoneInput.value = formatted;
+            lastVal = formatted;
+            const newPos = Math.max(0, selectionEnd + lengthDiff);
+            phoneInput.setSelectionRange(newPos, newPos);
+          } else {
+            lastVal = currentVal;
+          }
+        }
+      } catch (err) {
+        console.error("Error formatting phone:", err);
+      }
+    };
+
+    phoneInput.addEventListener('input', () => {
+      const fieldContainer = phoneInput.closest('.field');
+      const errEl = fieldContainer.querySelector('.field-error');
+      if (errEl) errEl.textContent = '';
+
+      const currentVal = phoneInput.value;
+      if (currentVal.length > lastVal.length) {
+        formatPhone();
+      } else {
+        lastVal = currentVal;
+      }
+    });
+
+    phoneInput.addEventListener('countrychange', formatPhone);
+
+    const form = document.getElementById('signupForm');
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        const phoneVal = signupIti.getNumber().trim();
+        if (!phoneVal) {
+          e.preventDefault();
+          showPhoneError("Phone number is required.");
+          return;
+        }
+
+        if (!signupIti.isValidNumber()) {
+          e.preventDefault();
+          showPhoneError("Enter a valid phone number.");
+          return;
+        }
+
+        phoneInput.value = phoneVal;
+      });
+    }
+  }
+});
+
+function showPhoneError(message) {
+  const phoneInput = document.getElementById('id_phone');
+  const fieldContainer = phoneInput.closest('.field');
+  let errSpan = fieldContainer.querySelector('.field-error');
+  if (!errSpan) {
+    errSpan = document.createElement('span');
+    errSpan.className = 'field-error';
+    fieldContainer.appendChild(errSpan);
+  }
+  errSpan.textContent = message;
+}
+</script>
+{% endblock %}
