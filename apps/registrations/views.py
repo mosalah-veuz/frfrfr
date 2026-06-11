@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 
 def portal(request):
     """Public ticket listing page."""
+    try:
+        from .services import expire_stale_pending_registrations_service
+        expire_stale_pending_registrations_service()
+    except Exception as exc:
+        logger.warning("Failed to run on-demand pending registration cleanup: %s", exc)
+
     tickets = get_active_tickets_with_counts_selector()
     return render(request, 'registrations/portal.html', {
         'tickets': tickets,
@@ -76,6 +82,12 @@ def checkout(request):
 @require_POST
 def register(request):
     """AJAX endpoint — validates and creates a registration."""
+    try:
+        from .services import expire_stale_pending_registrations_service
+        expire_stale_pending_registrations_service()
+    except Exception as exc:
+        logger.warning("Failed to run on-demand pending registration cleanup: %s", exc)
+
     try:
         data = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):

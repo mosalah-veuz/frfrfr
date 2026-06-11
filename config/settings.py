@@ -121,15 +121,6 @@ SESSION_COOKIE_AGE      = 28800  # 8 hours
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
-# Celery Configuration
-CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
-CELERY_TIMEZONE = 'UTC'
+# Celery Configuration (Disabled for lightweight on-demand cleanup)
 
-CELERY_BEAT_SCHEDULE = {
-    'expire-stale-pending-registrations': {
-        'task': 'registrations.expire_stale_pending_registrations',
-        'schedule': 300.0,  # runs every 5 minutes
-    },
-}
 

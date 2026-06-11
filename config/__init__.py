@@ -1,3 +1,2 @@
-from .celery import app as celery_app
+# Celery disabled for lightweight on-demand cleanup
 
-__all__ = ('celery_app',)
